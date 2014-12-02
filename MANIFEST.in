@@ -1,0 +1,8 @@
+include src/cuda4py/*.py
+include src/cuda4py/blas/*.py
+include tests/*.py
+include tests/*.cu
+include LICENSE
+include README
+include README.md
+include setup.py
