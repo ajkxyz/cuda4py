@@ -179,6 +179,7 @@ class Test(unittest.TestCase):
         ctx = cu.Devices().create_some_context()
         mem = cu.MemAlloc(ctx, 4096)
         self.assertTrue(type(mem.handle) == int)
+        self.assertEqual(mem.handle, int(mem))
         self.assertEqual(mem.size, 4096)
         self.assertIsNotNone(mem.handle)
         logging.debug("MemAlloc succeeded")
@@ -189,6 +190,7 @@ class Test(unittest.TestCase):
         ctx = cu.Devices().create_some_context()
         mem = cu.MemAllocManaged(ctx, 4096)
         self.assertTrue(type(mem.handle) == int)
+        self.assertEqual(mem.handle, int(mem))
         self.assertEqual(mem.size, 4096)
         self.assertIsNotNone(mem.handle)
         logging.debug("MemAllocManaged succeeded")
@@ -199,6 +201,7 @@ class Test(unittest.TestCase):
         ctx = cu.Devices().create_some_context()
         mem = cu.MemHostAlloc(ctx, 4096)
         self.assertTrue(type(mem.handle) == int)
+        self.assertEqual(mem.handle, int(mem))
         self.assertEqual(mem.size, 4096)
         self.assertIsNotNone(mem.handle)
         devptr = mem.device_pointer
