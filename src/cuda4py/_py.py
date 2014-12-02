@@ -210,6 +210,11 @@ class Memory(CU):
         self._size = size
         self._flags = flags
 
+    def __int__(self):
+        """Returns address of the allocation.
+        """
+        return self.handle
+
     @property
     def context(self):
         return self._context
