@@ -342,7 +342,7 @@ class MemHostAlloc(Memory):
         self._lib.cuMemFreeHost(self.handle)
 
 
-class Skip(object):
+class skip(object):
     """For skipping arguments when passed to set_args.
     """
     def __init__(self, amount=1):
@@ -378,9 +378,9 @@ class Function(CU):
         self._params = None
         i = 0
         for arg in args:
-            if arg is Skip:
+            if arg is skip:
                 i += 1
-            elif isinstance(arg, Skip):
+            elif isinstance(arg, skip):
                 i += arg.amount
             self.set_arg(i, arg)
             i += 1
