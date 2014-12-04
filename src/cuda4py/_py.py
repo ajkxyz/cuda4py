@@ -380,12 +380,14 @@ class Function(CU):
         for arg in args:
             if arg is skip:
                 i += 1
+                continue
             elif isinstance(arg, skip):
                 i += arg.amount
+                continue
             self.set_arg(i, arg)
             i += 1
-        del self._args[len(args):]
-        del self._refs[len(args):]
+        del self._args[i:]
+        del self._refs[i:]
 
     def set_arg(self, i, arg):
         self._params = None
