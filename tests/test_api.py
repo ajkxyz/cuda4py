@@ -74,7 +74,7 @@ class Test(unittest.TestCase):
             return
         logging.debug("Selecting device 0")
         d = devices[0]
-        self.assertTrue(type(d.handle) == int)
+        self.assertEqual(d.handle, int(d.handle))
         logging.debug("It's name is %s", d.name)
         logging.debug("It's total mem is %d", d.total_mem)
         logging.debug("It's compute capability is %d_%d",
@@ -169,7 +169,7 @@ class Test(unittest.TestCase):
         with ctx:
             self.assertIsNotNone(module.get_func("test"))
             ptr, size = module.get_global("g_a")
-            self.assertTrue(type(ptr) == int)
+            self.assertEqual(ptr, int(ptr))
             self.assertEqual(size, 4)
         logging.debug("Succeeded")
         logging.debug("EXIT: test_module")
@@ -178,7 +178,7 @@ class Test(unittest.TestCase):
         logging.debug("ENTER: test_mem_alloc")
         ctx = cu.Devices().create_some_context()
         mem = cu.MemAlloc(ctx, 4096)
-        self.assertTrue(type(mem.handle) == int)
+        self.assertEqual(mem.handle, int(mem.handle))
         self.assertEqual(mem.handle, int(mem))
         self.assertEqual(mem.size, 4096)
         self.assertIsNotNone(mem.handle)
@@ -189,7 +189,7 @@ class Test(unittest.TestCase):
         logging.debug("ENTER: test_mem_alloc_managed")
         ctx = cu.Devices().create_some_context()
         mem = cu.MemAllocManaged(ctx, 4096)
-        self.assertTrue(type(mem.handle) == int)
+        self.assertEqual(mem.handle, int(mem.handle))
         self.assertEqual(mem.handle, int(mem))
         self.assertEqual(mem.size, 4096)
         self.assertIsNotNone(mem.handle)
@@ -200,12 +200,12 @@ class Test(unittest.TestCase):
         logging.debug("ENTER: test_mem_host_alloc")
         ctx = cu.Devices().create_some_context()
         mem = cu.MemHostAlloc(ctx, 4096)
-        self.assertTrue(type(mem.handle) == int)
+        self.assertEqual(mem.handle, int(mem.handle))
         self.assertEqual(mem.handle, int(mem))
         self.assertEqual(mem.size, 4096)
         self.assertIsNotNone(mem.handle)
         devptr = mem.device_pointer
-        self.assertTrue(type(devptr) == int)
+        self.assertEqual(devptr, int(devptr))
         if ctx.device.unified_addressing:
             self.assertEqual(devptr, mem.handle)
         self.assertIsNotNone(mem.buffer)

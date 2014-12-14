@@ -437,6 +437,7 @@ class Module(CU):
         super(Module, self).__init__()
         self._context = context
         self._ptx = None
+        self._stdout = None
         self._stderr = None
 
         if ptx is None:
@@ -448,6 +449,9 @@ class Module(CU):
                 os.write(fout, source.encode("utf-8"))
                 os.close(fout)
 
+            fptx, ptx_file = tempfile.mkstemp(".ptx")
+            os.close(fptx)
+
             nvcc_options = list(nvcc_options)
             for dirnme in include_dirs:
                 if not len(dirnme):
@@ -455,19 +459,22 @@ class Module(CU):
                 nvcc_options.extend(("-I", dirnme))
             nvcc_options.append("-arch=sm_%d%d" %
                                 context.device.compute_capability)
-            nvcc_options.extend(("-ptx", "-o", "-"))
+            nvcc_options.extend(("-ptx", "-o", ptx_file))
             nvcc_options.insert(0, nvcc_path)
             nvcc_options.insert(1, source_file)
             try:
                 proc = subprocess.Popen(
                     nvcc_options, stdin=subprocess.PIPE,
                     stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                ptx, self._stderr = proc.communicate()
+                self._stdout, self._stderr = proc.communicate()
                 err = proc.returncode
+                with open(ptx_file, "rb") as fptx:
+                    ptx = fptx.read()
             except OSError:
                 raise RuntimeError("Could not execute %s" %
                                    " ".join(nvcc_options))
             finally:
+                os.unlink(ptx_file)
                 if source is not None:
                     os.unlink(source_file)
             if err:

@@ -343,7 +343,7 @@ def _initialize(backends):
         raise OSError("Could not load cuda library")
 
 
-def initialize(backends=("libcuda.so", "cuda.dll")):
+def initialize(backends=("libcuda.so", "nvcuda.dll")):
     global lib
     if lib is not None:
         return

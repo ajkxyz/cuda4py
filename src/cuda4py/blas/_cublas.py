@@ -148,7 +148,7 @@ def _initialize(backends):
     CU.ERRORS.update(ERRORS)
 
 
-def initialize(backends=("libcublas.so", "cublas.dll")):
+def initialize(backends=("libcublas.so", "cublas64_65.dll")):
     cuffi.initialize()
     global lib
     if lib is not None:
