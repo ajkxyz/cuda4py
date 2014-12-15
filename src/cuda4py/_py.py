@@ -479,7 +479,8 @@ class Module(CU):
     or linking from PTX binary.
     """
     def __init__(self, context, ptx=None, source=None, source_file=None,
-                 nvcc_options=(), nvcc_path="nvcc", include_dirs=()):
+                 nvcc_options=("-O3", "--ftz=true", "--fmad=true"),
+                 nvcc_path="nvcc", include_dirs=()):
         super(Module, self).__init__()
         self._context = context
         self._ptx = None

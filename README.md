@@ -36,6 +36,7 @@ PYTHONPATH=src nosetests3 -w tests
 for PyPy:
 ```bash
 PYTHONPATH=src pypy tests/test_api.py
+PYTHONPATH=src pypy tests/test_cublas.py
 ```
 
 Currently, PyPy numpy support may be incomplete,
