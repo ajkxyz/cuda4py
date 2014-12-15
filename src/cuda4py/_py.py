@@ -232,24 +232,70 @@ class Memory(CU):
         return self._flags
 
     def to_host(self, host_array, offs=0, size=None):
+        """Copies memory from device to host.
+
+        The function will block until completion.
+
+        Parameters:
+            host_array: host array to copy to (numpy, cffi handle or int).
+            offs: offset from the device memory base in bytes.
+            size: size of the memory to copy in bytes.
+        """
         ptr, size = CU.extract_ptr_and_size(host_array, size)
         err = self._lib.cuMemcpyDtoH_v2(ptr, self.handle + offs, size)
         if err:
             raise CU.error("cuMemcpyDtoH_v2", err)
 
     def to_device(self, host_array, offs=0, size=None):
+        """Copies memory from host to device.
+
+        The function will block until completion.
+
+        Parameters:
+            host_array: host array to copy from (numpy, cffi handle or int).
+            offs: offset from the device memory base in bytes.
+            size: size of the memory to copy in bytes.
+        """
         ptr, size = CU.extract_ptr_and_size(host_array, size)
         err = self._lib.cuMemcpyHtoD_v2(self.handle + offs, ptr, size)
         if err:
             raise CU.error("cuMemcpyHtoD_v2", err)
 
     def to_device_async(self, host_array, offs=0, size=None, stream=None):
+        """Copies memory from host to device.
+
+        The function will NOT block.
+
+        Parameters:
+            host_array: host array to copy from (numpy, cffi handle or int).
+            offs: offset from the device memory base in bytes.
+            size: size of the memory to copy in bytes.
+            stream: compute stream.
+        """
         ptr, size = CU.extract_ptr_and_size(host_array, size)
         err = self._lib.cuMemcpyHtoDAsync_v2(
             self.handle + offs, ptr, size,
             cu.NULL if stream is None else stream.handle)
         if err:
             raise CU.error("cuMemcpyHtoDAsync_v2", err)
+
+    def memset32_async(self, value=0, offs=0, size=None, stream=None):
+        """Sets memory object with 32-bit integer value.
+
+        The function will NOT block.
+
+        Parameters:
+            value: value to set with.
+            offs: offset from the device memory base in 32-bit elements.
+            size: size of device memory to set in 32-bit elements.
+            stream: compute stream.
+        """
+        err = self._lib.cuMemsetD32Async(
+            self.handle + (offs << 2), value,
+            (self.size >> 2) - offs if size is None else size,
+            cu.NULL if stream is None else stream.handle)
+        if err:
+            raise CU.error("cuMemsetD32Async", err)
 
     def _release(self):
         """Do actual memory release in child class.

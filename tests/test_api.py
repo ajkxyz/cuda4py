@@ -249,10 +249,24 @@ class Test(unittest.TestCase):
         logging.debug("test_launch_kernel() succeeded")
         logging.debug("EXIT: test_launch_kernel")
 
+    def test_memset(self):
+        logging.debug("ENTER: test_memset")
+        ctx = cu.Devices().create_some_context()
+        mem = cu.MemAlloc(ctx, 4096)
+        mem.memset32_async(123)
+        mem.memset32_async(456, 1)
+        mem.memset32_async(789, 2, 3)
+        a = numpy.zeros(mem.size // 4, dtype=numpy.int32)
+        mem.to_host(a)
+        self.assertEqual(a[0], 123)
+        self.assertEqual(a[1], 456)
+        for i in range(2, 2 + 3):
+            self.assertEqual(a[i], 789)
+        for i in range(2 + 3, a.size):
+            self.assertEqual(a[i], 456)
+        logging.debug("EXIT: test_memset")
+
 
 if __name__ == "__main__":
-    import os
-    os.environ["CUDA_DEVICE"] = "3"
-    os.environ["PATH"] = "/usr/local/cuda/bin:" + os.environ["PATH"]
     logging.basicConfig(level=logging.DEBUG)
     unittest.main()

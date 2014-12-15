@@ -325,6 +325,10 @@ def _initialize(backends):
                                   size_t srcHost,
                                   size_t ByteCount,
                                   CUstream hStream);
+    CUresult cuMemsetD32Async(CUdeviceptr dstDevice,
+                              unsigned int ui,
+                              size_t N,
+                              CUstream hStream);
     """
 
     # Parse
