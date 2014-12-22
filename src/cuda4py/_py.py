@@ -432,8 +432,6 @@ class Function(CU):
                 continue
             self.set_arg(i, arg)
             i += 1
-        del self._args[i:]
-        del self._refs[i:]
 
     def set_arg(self, i, arg):
         self._params = None
