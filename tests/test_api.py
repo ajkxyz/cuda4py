@@ -230,6 +230,8 @@ class Test(unittest.TestCase):
         f.set_args(cu.skip(2), numpy.array([C], dtype=numpy.float32))
         f.set_args(a, b, cu.skip(1))
         f.set_args(cu.skip(3))
+        f.set_arg(0, None)
+        f.set_arg(0, a)
         logging.debug("Args set")
         a_host = numpy.random.rand(N).astype(numpy.float32)
         b_host = numpy.random.rand(N).astype(numpy.float32)

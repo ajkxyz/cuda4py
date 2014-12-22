@@ -451,7 +451,7 @@ class Function(CU):
         if arr is not None:  # save address to the contents of the numpy array
             self._args[i] = cu.ffi.cast("size_t *", arr["data"][0])
             return
-        ptr[0] = cu.ffi.cast("size_t", arg)
+        ptr[0] = cu.ffi.cast("size_t", 0 if arg is None else arg)
         self._args[i] = ptr
 
     def __call__(self, grid_dims, block_dims=(1, 1, 1), args_tuple=None,
