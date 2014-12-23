@@ -420,6 +420,54 @@ class Function(CU):
     def module(self):
         return self._module
 
+    def max_active_blocks_per_multiprocessor(self, block_size,
+                                             dynamic_smem_size=0):
+        """Calculates occupancy of a function.
+
+        Parameters:
+            block_size: block size the kernel is intended to be launched with.
+            dynamic_smem_size: per-block dynamic shared memory usage intended,
+                               in bytes.
+
+        Returns:
+            num_blocks: the number of the maximum active blocks
+                        per streaming multiprocessor.
+        """
+        num_blocks = cu.ffi.new("int *")
+        err = self._lib.cuOccupancyMaxActiveBlocksPerMultiprocessor(
+            num_blocks, self.handle, block_size, dynamic_smem_size)
+        if err:
+            raise CU.error("cuOccupancyMaxActiveBlocksPerMultiprocessor", err)
+        return int(num_blocks[0])
+
+    def max_potential_block_size(self, block_size_to_dynamic_smem_size=None,
+                                 dynamic_smem_size=0, block_size_limit=0):
+        """Suggests a launch configuration with reasonable occupancy.
+
+        Parameters:
+            block_size_to_dynamic_smem_size:
+                callback that returns dynamic shared memory size in bytes
+                for a given block size, for example: lambda x: x ** 2
+            dynamic_smem_size: dynamic shared memory usage intended, in bytes.
+            block_size_limit: the maximum block size the kernel
+                              is designed to handle.
+
+        Returns:
+            min_grid_size, block_size:
+                minimum grid size needed to achieve the maximum occupancy,
+                maximum block size that can achieve the maximum occupancy.
+        """
+        min_grid_size = cu.ffi.new("int *")
+        block_size = cu.ffi.new("int *")
+        err = self._lib.cuOccupancyMaxPotentialBlockSize(
+            min_grid_size, block_size, self.handle,
+            cu.NULL if block_size_to_dynamic_smem_size is None else
+            cu.ffi.callback("size_t(int)", block_size_to_dynamic_smem_size),
+            dynamic_smem_size, block_size_limit)
+        if err:
+            raise CU.error("cuOccupancyMaxPotentialBlockSize", err)
+        return int(min_grid_size[0]), int(block_size[0])
+
     def set_args(self, *args):
         self._params = None
         i = 0

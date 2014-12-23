@@ -268,6 +268,63 @@ class Test(unittest.TestCase):
             self.assertEqual(a[i], 456)
         logging.debug("EXIT: test_memset")
 
+    def test_occupancy(self):
+        logging.debug("ENTER: test_occupancy")
+        ctx = cu.Devices().create_some_context()
+        logging.debug("Context created")
+        module = cu.Module(ctx, source_file="%s/test.cu" % self.path)
+        logging.debug("Program builded")
+        f = module.get_func("test")
+        logging.debug("Got function pointer")
+
+        num_blocks = f.max_active_blocks_per_multiprocessor(1)
+        self.assertEqual(num_blocks, int(num_blocks))
+        self.assertGreater(num_blocks, 0)
+        logging.debug("num_blocks = %d", num_blocks)
+        logging.debug("Testing dynamic_smem_size parameter")
+        num_blocks = f.max_active_blocks_per_multiprocessor(
+            128, dynamic_smem_size=8192)
+        self.assertEqual(num_blocks, int(num_blocks))
+        self.assertGreater(num_blocks, 0)
+        logging.debug("num_blocks = %d", num_blocks)
+
+        min_grid_size, block_size = f.max_potential_block_size()
+        self.assertEqual(min_grid_size, int(min_grid_size))
+        self.assertEqual(block_size, int(block_size))
+        self.assertGreater(min_grid_size, 0)
+        self.assertGreater(block_size, 0)
+        logging.debug("min_grid_size, block_size = %d, %d",
+                      min_grid_size, block_size)
+        logging.debug("Trying callback")
+        min_grid_size, block_size = f.max_potential_block_size(
+            lambda x: x ** 2)
+        self.assertEqual(min_grid_size, int(min_grid_size))
+        self.assertEqual(block_size, int(block_size))
+        self.assertGreater(min_grid_size, 0)
+        self.assertGreater(block_size, 0)
+        logging.debug("min_grid_size, block_size = %d, %d",
+                      min_grid_size, block_size)
+        logging.debug("Testing block_size_limit parameter")
+        min_grid_size, block_size = f.max_potential_block_size(
+            block_size_limit=16)
+        self.assertEqual(min_grid_size, int(min_grid_size))
+        self.assertEqual(block_size, int(block_size))
+        self.assertGreater(min_grid_size, 0)
+        self.assertGreater(block_size, 0)
+        self.assertLessEqual(block_size, 16)
+        logging.debug("min_grid_size, block_size = %d, %d",
+                      min_grid_size, block_size)
+        logging.debug("Testing dynamic_smem_size parameter")
+        min_grid_size, block_size = f.max_potential_block_size(
+            dynamic_smem_size=8192)
+        self.assertEqual(min_grid_size, int(min_grid_size))
+        self.assertEqual(block_size, int(block_size))
+        self.assertGreater(min_grid_size, 0)
+        self.assertGreater(block_size, 0)
+        logging.debug("min_grid_size, block_size = %d, %d",
+                      min_grid_size, block_size)
+        logging.debug("EXIT: test_occupancy")
+
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)

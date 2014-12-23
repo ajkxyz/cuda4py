@@ -248,6 +248,7 @@ def _initialize(backends):
     typedef void *CUstream;
     typedef size_t CUdeviceptr;
     typedef int CUdevice_attribute;
+    typedef size_t (*CUoccupancyB2DSize)(int blockSize);
 
     CUresult cuInit(unsigned int Flags);
 
@@ -329,6 +330,19 @@ def _initialize(backends):
                               unsigned int ui,
                               size_t N,
                               CUstream hStream);
+
+    CUresult cuOccupancyMaxActiveBlocksPerMultiprocessor(
+                                int *numBlocks,
+                                CUfunction func,
+                                int blockSize,
+                                size_t dynamicSMemSize);
+    CUresult cuOccupancyMaxPotentialBlockSize(
+                                int *minGridSize,
+                                int *blockSize,
+                                CUfunction func,
+                                CUoccupancyB2DSize blockSizeToDynamicSMemSize,
+                                size_t dynamicSMemSize,
+                                int blockSizeLimit);
     """
 
     # Parse
