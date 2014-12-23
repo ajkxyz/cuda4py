@@ -60,6 +60,26 @@ class Test(unittest.TestCase):
             os.environ["CUDA_DEVICE"] = self.old_env
         del self.old_env
 
+    def test_constants(self):
+        self.assertEqual(blas.CUBLAS_OP_N, 0)
+        self.assertEqual(blas.CUBLAS_OP_T, 1)
+        self.assertEqual(blas.CUBLAS_OP_C, 2)
+
+        self.assertEqual(blas.CUBLAS_STATUS_SUCCESS, 0)
+        self.assertEqual(blas.CUBLAS_STATUS_NOT_INITIALIZED, 1)
+        self.assertEqual(blas.CUBLAS_STATUS_ALLOC_FAILED, 3)
+        self.assertEqual(blas.CUBLAS_STATUS_INVALID_VALUE, 7)
+        self.assertEqual(blas.CUBLAS_STATUS_ARCH_MISMATCH, 8)
+        self.assertEqual(blas.CUBLAS_STATUS_MAPPING_ERROR, 11)
+        self.assertEqual(blas.CUBLAS_STATUS_EXECUTION_FAILED, 13)
+        self.assertEqual(blas.CUBLAS_STATUS_INTERNAL_ERROR, 14)
+        self.assertEqual(blas.CUBLAS_STATUS_NOT_SUPPORTED, 15)
+        self.assertEqual(blas.CUBLAS_STATUS_LICENSE_ERROR, 16)
+
+    def test_errors(self):
+        idx = cu.CU.ERRORS[blas.CUBLAS_STATUS_NOT_INITIALIZED].find(" | ")
+        self.assertGreater(idx, 0)
+
     def _test_gemm(self, gemm, dtype):
         a = numpy.zeros([127, 353], dtype=dtype)
         b = numpy.zeros([135, a.shape[1]], dtype=dtype)

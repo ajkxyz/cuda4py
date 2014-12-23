@@ -145,7 +145,13 @@ def _initialize(backends):
         raise OSError("Could not load cublas library")
 
     global ERRORS
-    CU.ERRORS.update(ERRORS)
+    for code, msg in ERRORS.items():
+        if code in CU.ERRORS:
+            s = " | " + msg
+            if s not in CU.ERRORS[code]:
+                CU.ERRORS[code] += s
+        else:
+            CU.ERRORS[code] = msg
 
 
 def initialize(backends=("libcublas.so", "cublas64_65.dll")):
