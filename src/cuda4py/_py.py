@@ -775,7 +775,134 @@ class Device(CU):
 
     @property
     def unified_addressing(self):
-        return self._get_attr(cu.CU_DEVICE_ATTRIBUTE_UNIFIED_ADDRESSING)
+        return bool(self._get_attr(cu.CU_DEVICE_ATTRIBUTE_UNIFIED_ADDRESSING))
+
+    @property
+    def warp_size(self):
+        return self._get_attr(cu.CU_DEVICE_ATTRIBUTE_WARP_SIZE)
+
+    @property
+    def max_threads_per_block(self):
+        return self._get_attr(cu.CU_DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK)
+
+    @property
+    def max_block_dims(self):
+        return (self._get_attr(cu.CU_DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_X),
+                self._get_attr(cu.CU_DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_Y),
+                self._get_attr(cu.CU_DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_Z))
+
+    @property
+    def max_grid_dims(self):
+        return (self._get_attr(cu.CU_DEVICE_ATTRIBUTE_MAX_GRID_DIM_X),
+                self._get_attr(cu.CU_DEVICE_ATTRIBUTE_MAX_GRID_DIM_Y),
+                self._get_attr(cu.CU_DEVICE_ATTRIBUTE_MAX_GRID_DIM_Z))
+
+    @property
+    def max_shared_memory_per_block(self):
+        return self._get_attr(
+            cu.CU_DEVICE_ATTRIBUTE_MAX_SHARED_MEMORY_PER_BLOCK)
+
+    @property
+    def max_registers_per_block(self):
+        return self._get_attr(cu.CU_DEVICE_ATTRIBUTE_MAX_REGISTERS_PER_BLOCK)
+
+    @property
+    def total_constant_memory(self):
+        return self._get_attr(cu.CU_DEVICE_ATTRIBUTE_TOTAL_CONSTANT_MEMORY)
+
+    @property
+    def multiprocessor_count(self):
+        return self._get_attr(cu.CU_DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT)
+
+    @property
+    def kernel_exec_timeout(self):
+        return self._get_attr(cu.CU_DEVICE_ATTRIBUTE_KERNEL_EXEC_TIMEOUT)
+
+    @property
+    def integrated(self):
+        return bool(self._get_attr(cu.CU_DEVICE_ATTRIBUTE_KERNEL_EXEC_TIMEOUT))
+
+    @property
+    def can_map_host_memory(self):
+        return bool(self._get_attr(cu.CU_DEVICE_ATTRIBUTE_CAN_MAP_HOST_MEMORY))
+
+    @property
+    def concurrent_kernels(self):
+        return bool(self._get_attr(cu.CU_DEVICE_ATTRIBUTE_CONCURRENT_KERNELS))
+
+    @property
+    def ecc_enabled(self):
+        return bool(self._get_attr(cu.CU_DEVICE_ATTRIBUTE_ECC_ENABLED))
+
+    @property
+    def memory_bus_width(self):
+        return self._get_attr(cu.CU_DEVICE_ATTRIBUTE_GLOBAL_MEMORY_BUS_WIDTH)
+
+    @property
+    def l2_cache_size(self):
+        return self._get_attr(cu.CU_DEVICE_ATTRIBUTE_L2_CACHE_SIZE)
+
+    @property
+    def max_threads_per_multiprocessor(self):
+        return self._get_attr(
+            cu.CU_DEVICE_ATTRIBUTE_MAX_THREADS_PER_MULTIPROCESSOR)
+
+    @property
+    def async_engine_count(self):
+        return self._get_attr(cu.CU_DEVICE_ATTRIBUTE_ASYNC_ENGINE_COUNT)
+
+    @property
+    def stream_priorities_supported(self):
+        return bool(self._get_attr(
+            cu.CU_DEVICE_ATTRIBUTE_STREAM_PRIORITIES_SUPPORTED))
+
+    @property
+    def global_l1_cache_supported(self):
+        return bool(self._get_attr(
+            cu.CU_DEVICE_ATTRIBUTE_GLOBAL_L1_CACHE_SUPPORTED))
+
+    @property
+    def local_l1_cache_supported(self):
+        return bool(self._get_attr(
+            cu.CU_DEVICE_ATTRIBUTE_LOCAL_L1_CACHE_SUPPORTED))
+
+    @property
+    def max_shared_memory_per_multiprocessor(self):
+        return self._get_attr(
+            cu.CU_DEVICE_ATTRIBUTE_MAX_SHARED_MEMORY_PER_MULTIPROCESSOR)
+
+    @property
+    def max_registers_per_multiprocessor(self):
+        return self._get_attr(
+            cu.CU_DEVICE_ATTRIBUTE_MAX_REGISTERS_PER_MULTIPROCESSOR)
+
+    @property
+    def managed_memory(self):
+        return bool(self._get_attr(cu.CU_DEVICE_ATTRIBUTE_MANAGED_MEMORY))
+
+    @property
+    def multi_gpu_board(self):
+        return bool(self._get_attr(cu.CU_DEVICE_ATTRIBUTE_MULTI_GPU_BOARD))
+
+    @property
+    def multi_gpu_board_group_id(self):
+        return self._get_attr(cu.CU_DEVICE_ATTRIBUTE_MULTI_GPU_BOARD_GROUP_ID)
+
+    @property
+    def max_pitch(self):
+        return self._get_attr(cu.CU_DEVICE_ATTRIBUTE_MAX_PITCH)
+
+    @property
+    def clock_rate(self):
+        """Clock rate in kHz.
+        """
+        return self._get_attr(cu.CU_DEVICE_ATTRIBUTE_CLOCK_RATE)
+
+    @property
+    def memory_clock_rate(self):
+        """Memory clock rate in kHz.
+        """
+        return self._get_attr(cu.CU_DEVICE_ATTRIBUTE_MEMORY_CLOCK_RATE)
 
     def _get_attr(self, attr):
         n = cu.ffi.new("int *")

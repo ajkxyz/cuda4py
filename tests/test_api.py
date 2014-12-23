@@ -86,6 +86,46 @@ class Test(unittest.TestCase):
         logging.debug("Succeeded")
         logging.debug("EXIT: test_devices")
 
+    def test_attributes(self):
+        d = cu.Devices()[0]
+        self.assertIsInstance(d.unified_addressing, bool)
+        self.assertGreater(d.warp_size, 0)
+        self.assertGreater(d.max_threads_per_block, 0)
+        self.assertGreaterEqual(d.max_shared_memory_per_block, 0)
+        xyz = d.max_block_dims
+        self.assertIsInstance(xyz, tuple)
+        self.assertEqual(len(xyz), 3)
+        for x in xyz:
+            self.assertGreater(x, 0)
+        xyz = d.max_grid_dims
+        self.assertIsInstance(xyz, tuple)
+        self.assertEqual(len(xyz), 3)
+        for x in xyz:
+            self.assertGreater(x, 0)
+        self.assertGreater(d.max_registers_per_block, 0)
+        self.assertGreater(d.clock_rate, 0)
+        self.assertGreater(d.memory_clock_rate, 0)
+        self.assertGreaterEqual(d.total_constant_memory, 0)
+        self.assertGreater(d.multiprocessor_count, 0)
+        self.assertGreaterEqual(d.kernel_exec_timeout, 0)
+        self.assertIsInstance(d.integrated, bool)
+        self.assertIsInstance(d.can_map_host_memory, bool)
+        self.assertIsInstance(d.concurrent_kernels, bool)
+        self.assertIsInstance(d.ecc_enabled, bool)
+        self.assertGreater(d.memory_bus_width, 0)
+        self.assertGreaterEqual(d.l2_cache_size, 0)
+        self.assertGreater(d.max_threads_per_multiprocessor, 0)
+        self.assertGreaterEqual(d.async_engine_count, 0)
+        self.assertIsInstance(d.stream_priorities_supported, bool)
+        self.assertIsInstance(d.global_l1_cache_supported, bool)
+        self.assertIsInstance(d.local_l1_cache_supported, bool)
+        self.assertGreaterEqual(d.max_shared_memory_per_multiprocessor, 0)
+        self.assertGreater(d.max_registers_per_multiprocessor, 0)
+        self.assertIsInstance(d.managed_memory, bool)
+        self.assertIsInstance(d.multi_gpu_board, bool)
+        self.assertGreaterEqual(d.multi_gpu_board_group_id, 0)
+        self.assertGreaterEqual(d.max_pitch, 0)
+
     def test_dump_devices(self):
         logging.debug("ENTER: test_dump_devices")
         logging.debug("Available CUDA devices:\n%s",
