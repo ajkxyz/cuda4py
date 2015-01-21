@@ -37,6 +37,7 @@ Original author: Alexey Kazantsev <a.kazantsev@samsung.com>
 Helper classes.
 """
 import cuda4py._cffi as cu
+import gc
 import os
 import subprocess
 import sys
@@ -204,11 +205,20 @@ class Memory(CU):
         size: size of the allocation.
         flags: flags of the allocation.
     """
-    def __init__(self, context, size, flags=0):
+    def __init__(self, context, size_or_ndarray, flags=0):
         super(Memory, self).__init__()
         self._context = context
+        size = getattr(size_or_ndarray, "nbytes", size_or_ndarray)
         self._size = size
         self._flags = flags
+        self._device_alloc()
+        if size is not size_or_ndarray:
+            self.to_device(size_or_ndarray)
+
+    def _device_alloc(self):
+        """Call CUDA api to allocate memory here.
+        """
+        raise NotImplementedError()
 
     def __int__(self):
         """Returns address of the allocation.
@@ -321,11 +331,10 @@ class MemAlloc(Memory):
     Attributes:
         handle: pointer in the device address space (int).
     """
-    def __init__(self, context, size, flags=0):
-        super(MemAlloc, self).__init__(context, size, flags)
+    def _device_alloc(self):
         ptr = cu.ffi.new("CUdeviceptr *")
-        with context:
-            err = self._lib.cuMemAlloc_v2(ptr, size)
+        with self.context:
+            err = self._lib.cuMemAlloc_v2(ptr, self.size)
         if err:
             raise CU.error("cuMemAlloc_v2", err)
         self._handle = int(ptr[0])
@@ -340,11 +349,14 @@ class MemAllocManaged(Memory):
     Attributes:
         handle: pointer in the unified address space (int).
     """
-    def __init__(self, context, size, flags=cu.CU_MEM_ATTACH_GLOBAL):
-        super(MemAllocManaged, self).__init__(context, size, flags)
+    def __init__(self, context, size_or_ndarray,
+                 flags=cu.CU_MEM_ATTACH_GLOBAL):
+        super(MemAllocManaged, self).__init__(context, size_or_ndarray, flags)
+
+    def _device_alloc(self):
         ptr = cu.ffi.new("CUdeviceptr *")
-        with context:
-            err = self._lib.cuMemAllocManaged(ptr, size, flags)
+        with self.context:
+            err = self._lib.cuMemAllocManaged(ptr, self.size, self.flags)
         if err:
             raise CU.error("cuMemAllocManaged", err)
         self._handle = int(ptr[0])
@@ -359,13 +371,15 @@ class MemHostAlloc(Memory):
     Attributes:
         handle: pointer in the host address space (int).
     """
-    def __init__(self, context, size,
+    def __init__(self, context, size_or_ndarray,
                  flags=(cu.CU_MEMHOSTALLOC_PORTABLE |
                         cu.CU_MEMHOSTALLOC_DEVICEMAP)):
-        super(MemHostAlloc, self).__init__(context, size, flags)
+        super(MemHostAlloc, self).__init__(context, size_or_ndarray, flags)
+
+    def _device_alloc(self):
         pp = cu.ffi.new("size_t *")
-        with context:
-            err = self._lib.cuMemHostAlloc(pp, size, flags)
+        with self.context:
+            err = self._lib.cuMemHostAlloc(pp, self.size, self.flags)
         if err:
             raise CU.error("cuMemHostAlloc", err)
         self._handle = int(pp[0])
@@ -522,11 +536,28 @@ class Function(CU):
 
 class Module(CU):
     """Class for compiling CUDA module from source (nvcc is required)
-    or linking from PTX binary.
+    or linking from PTX/cubin/fatbin binary.
     """
+    OPTIONS_PTX = ("-ptx",)
+    OPTIONS_CUBLAS = ("-cubin", "-lcudadevrt", "-lcublas_device", "-dlink")
+
     def __init__(self, context, ptx=None, source=None, source_file=None,
                  nvcc_options=("-O3", "--ftz=true", "--fmad=true"),
-                 nvcc_path="nvcc", include_dirs=()):
+                 nvcc_path="nvcc", include_dirs=(),
+                 nvcc_options2=OPTIONS_PTX):
+        """Calls cuModuleLoadData, invoking nvcc if ptx is not None.
+
+        Parameters:
+            context: Context instance.
+            ptx: str or bytes of PTX, cubin or fatbin.
+            source: kernel source code to invoke nvcc on.
+            source_file: path to the file with kernel code.
+            nvcc_options: general options for nvcc.
+            nvcc_path: path to execute as nvcc.
+            include_dirs: include directories for nvcc.
+            nvcc_options2: more options for nvcc (defaults to ("-ptx",)),
+                example: ("-cubin", "-lcudadevrt", "-lcublas_device", "-dlink")
+        """
         super(Module, self).__init__()
         self._context = context
         self._ptx = None
@@ -552,7 +583,8 @@ class Module(CU):
                 nvcc_options.extend(("-I", dirnme))
             nvcc_options.append("-arch=sm_%d%d" %
                                 context.device.compute_capability)
-            nvcc_options.extend(("-ptx", "-o", ptx_file))
+            nvcc_options.extend(nvcc_options2)
+            nvcc_options.extend(("-o", ptx_file))
             nvcc_options.insert(0, nvcc_path)
             nvcc_options.insert(1, source_file)
             try:
@@ -575,12 +607,16 @@ class Module(CU):
                                    "\nCommand line was:\n%s" %
                                    (err, self.stderr.decode("utf-8"),
                                     " ".join(nvcc_options)))
-        self._ptx = ptx.encode("utf-8") if type(ptx) == str else ptx
+        self._ptx = ptx.encode("utf-8") if type(ptx) != type(b"") else ptx
+
+        # Workaround to prevent deadlock in pypy when doing
+        # garbage collection inside CFFI.new
+        gc.collect()
 
         module = cu.ffi.new("CUmodule *")
-        _ptx = cu.ffi.new("unsigned char[]", self.ptx)
+        ptx = cu.ffi.new("unsigned char[]", self._ptx)
         with context:
-            err = self._lib.cuModuleLoadData(module, _ptx)
+            err = self._lib.cuModuleLoadData(module, ptx)
         if err:
             raise CU.error("cuModuleLoadData", err)
         self._handle = module[0]
@@ -649,20 +685,25 @@ class Context(CU):
         if err:
             raise CU.error("cuCtxSynchronize", err)
 
-    def mem_alloc(self, size):
-        return MemAlloc(self, size)
+    def mem_alloc(self, size_or_ndarray):
+        return MemAlloc(self, size_or_ndarray)
 
-    def mem_alloc_managed(self, size, flags=cu.CU_MEM_ATTACH_GLOBAL):
-        return MemAllocManaged(self, size, flags)
+    def mem_alloc_managed(self, size_or_ndarray,
+                          flags=cu.CU_MEM_ATTACH_GLOBAL):
+        return MemAllocManaged(self, size_or_ndarray, flags)
 
-    def mem_host_alloc(self, size, flags=(cu.CU_MEMHOSTALLOC_PORTABLE |
-                                          cu.CU_MEMHOSTALLOC_DEVICEMAP)):
-        return MemHostAlloc(self, size, flags)
+    def mem_host_alloc(self, size_or_ndarray,
+                       flags=(cu.CU_MEMHOSTALLOC_PORTABLE |
+                              cu.CU_MEMHOSTALLOC_DEVICEMAP)):
+        return MemHostAlloc(self, size_or_ndarray, flags)
 
     def create_module(self, ptx=None, source=None, source_file=None,
-                      nvcc_options=(), nvcc_path="nvcc", include_dirs=()):
+                      nvcc_options=("-O3", "--ftz=true", "--fmad=true"),
+                      nvcc_path="nvcc", include_dirs=(),
+                      nvcc_options2=Module.OPTIONS_PTX):
         return Module(self, ptx, source, source_file,
-                      nvcc_options, nvcc_path, include_dirs)
+                      nvcc_options, nvcc_path, include_dirs,
+                      nvcc_options2)
 
     def set_current(self):
         err = self._lib.cuCtxSetCurrent(self.handle)

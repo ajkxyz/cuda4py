@@ -52,6 +52,9 @@ class Test(unittest.TestCase):
             os.environ["CUDA_DEVICE"] = "0"
         self.ctx = cu.Devices().create_some_context()
         self.blas = blas.CUBLAS(self.ctx)
+        self.path = os.path.dirname(__file__)
+        if not len(self.path):
+            self.path = "."
 
     def tearDown(self):
         if self.old_env is None:
@@ -119,6 +122,45 @@ class Test(unittest.TestCase):
         with self.ctx:
             self._test_gemm(self.blas.dgemm, numpy.float64)
         logging.debug("EXIT: test_dgemm")
+
+    def test_kernel(self):
+        logging.debug("ENTER: test_kernel")
+        if self.ctx.device.compute_capability < (3, 5):
+            logging.debug("Requires compute capability >= (3, 5)")
+            logging.debug("EXIT: test_kernel")
+            return
+        with self.ctx:
+            module = cu.Module(
+                self.ctx, source_file=("%s/cublas.cu" % self.path),
+                nvcc_options2=cu.Module.OPTIONS_CUBLAS)
+            logging.debug("Compiled")
+            f = module.create_function("test")
+            logging.debug("Got function")
+
+            n = 256
+            a = numpy.random.rand(n, n).astype(numpy.float32)
+            b = numpy.random.rand(n, n).astype(numpy.float32)
+            c = numpy.zeros_like(a)
+            c_gold = numpy.dot(a.transpose(), b.transpose()).transpose()
+            a_ = cu.MemAlloc(self.ctx, a)
+            b_ = cu.MemAlloc(self.ctx, b)
+            c_ = cu.MemAlloc(self.ctx, c)
+            zero_ = cu.MemAlloc(self.ctx, numpy.zeros(1, dtype=numpy.float32))
+            one_ = cu.MemAlloc(self.ctx, numpy.ones(1, dtype=numpy.float32))
+            logging.debug("Allocated arrays")
+
+            f.set_args(numpy.array([n], dtype=numpy.int64), one_, a_, b_,
+                       zero_, c_)
+            logging.debug("Set args")
+
+            f((1, 1, 1), (1, 1, 1))
+            logging.debug("Executed")
+
+            c_.to_host(c)
+            max_diff = numpy.fabs(c - c_gold).max()
+            logging.debug("Maximum difference is %.6f", max_diff)
+            self.assertLess(max_diff, 1.0e-3)
+        logging.debug("EXIT: test_kernel")
 
 
 if __name__ == "__main__":

@@ -193,6 +193,13 @@ class Test(unittest.TestCase):
         self.assertIsNotNone(ctx.handle)
         logging.debug("nvcc compilation succeeded")
         logging.debug("Resulted ptx code is:\n%s", module.ptx.decode("utf-8"))
+
+        logging.debug("Will try Context.create_module")
+        module = ctx.create_module(source_file="%s/test.cu" % self.path)
+        self.assertIsNotNone(module.handle)
+        self.assertIsNotNone(ctx.handle)
+        logging.debug("Succeeded")
+
         logging.debug("Will try to compile with includes")
         module = cu.Module(ctx, source_file="%s/inc.cu" % self.path,
                            include_dirs=("", self.path, ""))
@@ -214,41 +221,54 @@ class Test(unittest.TestCase):
         logging.debug("Succeeded")
         logging.debug("EXIT: test_module")
 
-    def test_mem_alloc(self):
-        logging.debug("ENTER: test_mem_alloc")
-        ctx = cu.Devices().create_some_context()
-        mem = cu.MemAlloc(ctx, 4096)
+    def _test_alloc(self, alloc, test=None):
+        mem = alloc(4096)
         self.assertEqual(mem.handle, int(mem.handle))
         self.assertEqual(mem.handle, int(mem))
         self.assertEqual(mem.size, 4096)
         self.assertIsNotNone(mem.handle)
+        if test is not None:
+            test(mem)
+
+        a = numpy.random.rand(4096).astype(numpy.float32)
+        mem = alloc(a)
+        b = numpy.zeros_like(a)
+        mem.to_host(b)
+        max_diff = float(numpy.fabs(a - b).max())
+        self.assertEqual(max_diff, 0.0)
+        if test is not None:
+            test(mem)
+
+    def test_mem_alloc(self):
+        logging.debug("ENTER: test_mem_alloc")
+        ctx = cu.Devices().create_some_context()
+        self._test_alloc(lambda a: cu.MemAlloc(ctx, a))
+        self._test_alloc(ctx.mem_alloc)
         logging.debug("MemAlloc succeeded")
         logging.debug("EXIT: test_mem_alloc")
 
     def test_mem_alloc_managed(self):
         logging.debug("ENTER: test_mem_alloc_managed")
         ctx = cu.Devices().create_some_context()
-        mem = cu.MemAllocManaged(ctx, 4096)
-        self.assertEqual(mem.handle, int(mem.handle))
-        self.assertEqual(mem.handle, int(mem))
-        self.assertEqual(mem.size, 4096)
-        self.assertIsNotNone(mem.handle)
+        self._test_alloc(lambda a: cu.MemAllocManaged(ctx, a))
+        self._test_alloc(ctx.mem_alloc_managed)
         logging.debug("MemAllocManaged succeeded")
         logging.debug("EXIT: test_mem_alloc_managed")
 
     def test_mem_host_alloc(self):
         logging.debug("ENTER: test_mem_host_alloc")
         ctx = cu.Devices().create_some_context()
-        mem = cu.MemHostAlloc(ctx, 4096)
-        self.assertEqual(mem.handle, int(mem.handle))
-        self.assertEqual(mem.handle, int(mem))
-        self.assertEqual(mem.size, 4096)
-        self.assertIsNotNone(mem.handle)
-        devptr = mem.device_pointer
-        self.assertEqual(devptr, int(devptr))
-        if ctx.device.unified_addressing:
-            self.assertEqual(devptr, mem.handle)
-        self.assertIsNotNone(mem.buffer)
+
+        def test(mem):
+            devptr = mem.device_pointer
+            self.assertEqual(devptr, int(devptr))
+            if ctx.device.unified_addressing:
+                self.assertEqual(devptr, mem.handle)
+            self.assertIsNotNone(mem.buffer)
+
+        self._test_alloc(lambda a: cu.MemHostAlloc(ctx, a), test)
+        self._test_alloc(ctx.mem_host_alloc, test)
+
         logging.debug("MemHostAlloc succeeded")
         logging.debug("EXIT: test_mem_host_alloc")
 
