@@ -328,6 +328,36 @@ class Test(unittest.TestCase):
             self.assertEqual(a[i], 456)
         logging.debug("EXIT: test_memset")
 
+    def test_memcpy(self):
+        logging.debug("ENTER: test_memcpy")
+        ctx = cu.Devices().create_some_context()
+        a = cu.MemAlloc(ctx, 4096)
+        a.memset32_async(123)
+        b = cu.MemAlloc(ctx, 4096)
+        b.memset32_async(456)
+        test = numpy.zeros(a.size // 4, dtype=numpy.int32)
+        a.from_device_async(b)
+        a.to_host(test)
+        for x in test:
+            self.assertEqual(x, 456)
+        a.memset32_async(123)
+        a.from_device_async(b, 12)
+        a.to_host(test)
+        for x in test[:3]:
+            self.assertEqual(x, 123)
+        for x in test[3:]:
+            self.assertEqual(x, 456)
+        a.memset32_async(123)
+        a.from_device_async(b, 12, 64)
+        a.to_host(test)
+        for x in test[:3]:
+            self.assertEqual(x, 123)
+        for x in test[3:19]:
+            self.assertEqual(x, 456)
+        for x in test[19:]:
+            self.assertEqual(x, 123)
+        logging.debug("EXIT: test_memcpy")
+
     def test_occupancy(self):
         logging.debug("ENTER: test_occupancy")
         ctx = cu.Devices().create_some_context()

@@ -289,6 +289,25 @@ class Memory(CU):
         if err:
             raise CU.error("cuMemcpyHtoDAsync_v2", err)
 
+    def from_device_async(self, src, dst_offs=0, size=None, stream=None):
+        """Copies memory from device to device.
+
+        The function will NOT block.
+
+        Parameters:
+            src: source device buffer to copy memory from (Memory, int).
+            dst_offs: offset from this device memory base in bytes.
+            size: size of the memory to copy in bytes
+                  (defaults to this buffer size - dst_offs).
+            stream: compute stream.
+        """
+        err = self._lib.cuMemcpyDtoDAsync_v2(
+            self.handle + dst_offs, int(src),
+            self.size - dst_offs if size is None else size,
+            cu.NULL if stream is None else stream.handle)
+        if err:
+            raise CU.error("cuMemcpyDtoDAsync_v2", err)
+
     def memset32_async(self, value=0, offs=0, size=None, stream=None):
         """Sets memory object with 32-bit integer value.
 
