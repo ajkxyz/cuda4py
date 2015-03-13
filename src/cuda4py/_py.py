@@ -753,7 +753,8 @@ class Context(CU):
         return ctx[0]
 
     def __enter__(self):
-        self.push_current()
+        if self.handle is not None:
+            self.push_current()
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
