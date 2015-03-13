@@ -700,6 +700,8 @@ class Context(CU):
         self.device = device
 
     def synchronize(self):
+        if self.handle is None:
+            return
         err = self._lib.cuCtxSynchronize()
         if err:
             raise CU.error("cuCtxSynchronize", err)
