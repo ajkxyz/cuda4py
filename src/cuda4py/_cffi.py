@@ -232,6 +232,13 @@ CU_MEM_ATTACH_HOST = 0x2
 CU_MEM_ATTACH_SINGLE = 0x4
 
 
+#: CUmemorytype
+CU_MEMORYTYPE_HOST = 0x01
+CU_MEMORYTYPE_DEVICE = 0x02
+CU_MEMORYTYPE_ARRAY = 0x03
+CU_MEMORYTYPE_UNIFIED = 0x04
+
+
 def _initialize(backends):
     global lib
     if lib is not None:
@@ -249,6 +256,38 @@ def _initialize(backends):
     typedef size_t CUdeviceptr;
     typedef int CUdevice_attribute;
     typedef size_t (*CUoccupancyB2DSize)(int blockSize);
+    typedef int CUmemorytype;
+    typedef void *CUarray;
+
+    typedef struct CUDA_MEMCPY3D_st {
+        size_t srcXInBytes;
+        size_t srcY;
+        size_t srcZ;
+        size_t srcLOD;
+        CUmemorytype srcMemoryType;
+        size_t srcHost;
+        CUdeviceptr srcDevice;
+        CUarray srcArray;
+        void *reserved0;
+        size_t srcPitch;
+        size_t srcHeight;
+
+        size_t dstXInBytes;
+        size_t dstY;
+        size_t dstZ;
+        size_t dstLOD;
+        CUmemorytype dstMemoryType;
+        size_t dstHost;
+        CUdeviceptr dstDevice;
+        CUarray dstArray;
+        void *reserved1;
+        size_t dstPitch;
+        size_t dstHeight;
+
+        size_t WidthInBytes;
+        size_t Height;
+        size_t Depth;
+    } CUDA_MEMCPY3D;
 
     CUresult cuInit(unsigned int Flags);
 
@@ -334,6 +373,8 @@ def _initialize(backends):
                               unsigned int ui,
                               size_t N,
                               CUstream hStream);
+    CUresult cuMemcpy3DAsync_v2(const CUDA_MEMCPY3D *pCopy,
+                                CUstream hStream);
 
     CUresult cuOccupancyMaxActiveBlocksPerMultiprocessor(
                                 int *numBlocks,

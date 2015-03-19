@@ -36,12 +36,13 @@ Original author: Alexey Kazantsev <a.kazantsev@samsung.com>
 """
 Tests some of the api in cuda4py.blas._cublas module.
 """
-import unittest
-import logging
-import numpy
 import cuda4py as cu
 import cuda4py.blas as blas
+import gc
+import logging
+import numpy
 import os
+import unittest
 
 
 class Test(unittest.TestCase):
@@ -62,6 +63,9 @@ class Test(unittest.TestCase):
         else:
             os.environ["CUDA_DEVICE"] = self.old_env
         del self.old_env
+        del self.blas
+        del self.ctx
+        gc.collect()
 
     def test_constants(self):
         self.assertEqual(blas.CUBLAS_OP_N, 0)
@@ -87,7 +91,10 @@ class Test(unittest.TestCase):
         a = numpy.zeros([127, 353], dtype=dtype)
         b = numpy.zeros([135, a.shape[1]], dtype=dtype)
         c = numpy.zeros([a.shape[0], b.shape[0]], dtype=dtype)
-        numpy.random.seed(123)
+        try:
+            numpy.random.seed(123)
+        except AttributeError:  # PyPy workaround
+            pass
         a[:] = numpy.random.rand(a.size).astype(dtype).reshape(a.shape) - 0.5
         b[:] = numpy.random.rand(b.size).astype(dtype).reshape(b.shape) - 0.5
         gold_c = numpy.dot(a, b.transpose())

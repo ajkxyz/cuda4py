@@ -49,6 +49,7 @@ does not depend on the previous CUDA kernel launches.
 """
 import cuda4py as cu
 import cuda4py.blas as cublas
+import gc
 import logging
 import numpy
 import os
@@ -57,6 +58,22 @@ import unittest
 
 
 class Test(unittest.TestCase):
+    def setUp(self):
+        self.old_env = os.environ.get("CUDA_DEVICE")
+        if self.old_env is None:
+            os.environ["CUDA_DEVICE"] = "0"
+        self.path = os.path.dirname(__file__)
+        if not len(self.path):
+            self.path = "."
+
+    def tearDown(self):
+        if self.old_env is None:
+            del os.environ["CUDA_DEVICE"]
+        else:
+            os.environ["CUDA_DEVICE"] = self.old_env
+        del self.old_env
+        gc.collect()
+
     def test_kernel(self):
         path = os.path.dirname(__file__)
         if not len(path):

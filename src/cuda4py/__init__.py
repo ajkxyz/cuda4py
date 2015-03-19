@@ -38,6 +38,7 @@ Init module.
 """
 
 from cuda4py._cffi import (initialize,
+                           ffi,
                            lib,
                            NULL,
 

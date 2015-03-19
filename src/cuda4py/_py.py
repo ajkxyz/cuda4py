@@ -326,6 +326,83 @@ class Memory(CU):
         if err:
             raise CU.error("cuMemsetD32Async", err)
 
+    def memcpy_3d_async(self, src_origin, dst_origin, region,
+                        src_pitch=0, src_height=0,
+                        dst_pitch=0, dst_height=0,
+                        src=None, dst=None, stream=None):
+        """Copies memory for 3D arrays.
+
+        The function will NOT block.
+
+        Parameters:
+            src_origin: (src_x_in_bytes, src_y, src_z).
+            dst_origin: (dst_x_in_bytes, dst_y, dst_z).
+            region: (width_in_bytes, height, depth) of the region to copy.
+            src_pitch: the length of each source row in bytes.
+            src_height: the height of each source 2D slice.
+            dst_pitch: the length of each destination row in bytes.
+            dst_height: the height of each destination 2D slice.
+            src: source:
+                None - use self as the source,
+                convertible to int - use as the device buffer address,
+                numpy array - use as the host buffer address.
+            dst: destination:
+                None - use self as the destination,
+                convertible to int - use as the device buffer address,
+                numpy array - use as the host buffer address.
+            stream: compute stream.
+        """
+        p_copy = cu.ffi.new("CUDA_MEMCPY3D *")
+
+        p_copy.WidthInBytes = region[0]
+        p_copy.Height = region[1]
+        p_copy.Depth = region[2]
+
+        p_copy.srcXInBytes = src_origin[0]
+        p_copy.srcY = src_origin[1]
+        p_copy.srcZ = src_origin[2]
+
+        p_copy.dstXInBytes = dst_origin[0]
+        p_copy.dstY = dst_origin[1]
+        p_copy.dstZ = dst_origin[2]
+
+        p_copy.srcPitch = src_pitch if src_pitch else src_origin[0] + region[0]
+        p_copy.srcHeight = (src_height if src_height
+                            else src_origin[1] + region[1])
+
+        p_copy.dstPitch = dst_pitch if dst_pitch else dst_origin[0] + region[0]
+        p_copy.dstHeight = (dst_height if dst_height
+                            else dst_origin[1] + region[1])
+
+        if src is None:
+            p_copy.srcDevice = self.handle
+            p_copy.srcMemoryType = cu.CU_MEMORYTYPE_DEVICE
+        else:
+            arr = getattr(src, "__array_interface__", None)
+            if arr is None:
+                p_copy.srcDevice = int(src)
+                p_copy.srcMemoryType = cu.CU_MEMORYTYPE_DEVICE
+            else:
+                p_copy.srcHost = arr["data"][0]
+                p_copy.srcMemoryType = cu.CU_MEMORYTYPE_HOST
+
+        if dst is None:
+            p_copy.dstDevice = self.handle
+            p_copy.dstMemoryType = cu.CU_MEMORYTYPE_DEVICE
+        else:
+            arr = getattr(dst, "__array_interface__", None)
+            if arr is None:
+                p_copy.dstDevice = int(dst)
+                p_copy.dstMemoryType = cu.CU_MEMORYTYPE_DEVICE
+            else:
+                p_copy.dstHost = arr["data"][0]
+                p_copy.dstMemoryType = cu.CU_MEMORYTYPE_HOST
+
+        err = self._lib.cuMemcpy3DAsync_v2(
+            p_copy, cu.NULL if stream is None else stream.handle)
+        if err:
+            raise CU.error("cuMemcpy3DAsync_v2", err)
+
     def _release(self):
         """Do actual memory release in child class.
 

@@ -36,6 +36,7 @@ Original author: Alexey Kazantsev <a.kazantsev@samsung.com>
 """
 Tests some of the api in cuda4py package.
 """
+import gc
 import logging
 import cuda4py as cu
 try:
@@ -62,6 +63,7 @@ class Test(unittest.TestCase):
         else:
             os.environ["CUDA_DEVICE"] = self.old_env
         del self.old_env
+        gc.collect()
 
     def test_devices(self):
         logging.debug("ENTER: test_devices")
@@ -414,6 +416,64 @@ class Test(unittest.TestCase):
         logging.debug("min_grid_size, block_size = %d, %d",
                       min_grid_size, block_size)
         logging.debug("EXIT: test_occupancy")
+
+    def test_memcpy_3d_async(self):
+        logging.debug("ENTER: test_memcpy_3d_async")
+
+        p_copy = cu.ffi.new("CUDA_MEMCPY3D *")
+        assert cu.ffi.sizeof(p_copy[0]) == 200
+
+        ctx = cu.Devices().create_some_context()
+        logging.debug("Context created")
+
+        # Create arrays with some values for testing
+        a = numpy.arange(35 * 25 * 15, dtype=numpy.float32).reshape(35, 25, 15)
+        b = numpy.arange(37 * 27 * 17, dtype=numpy.float32).reshape(37, 27, 17)
+        b *= 0.5
+        c = numpy.empty_like(b)
+        c[:] = 1.0e30
+
+        # Create buffers
+        a_ = cu.MemAlloc(ctx, a)
+        b_ = cu.MemAlloc(ctx, b)
+
+        # Copy 3D rect from one device buffer to another
+        logging.debug("Testing device -> device memcpy_3d_async")
+        sz = a.itemsize
+        a_.memcpy_3d_async(
+            (3 * sz, 4, 5), (6 * sz, 7, 8), (5 * sz, 10, 20),
+            a.shape[2] * sz, a.shape[1], b.shape[2] * sz, b.shape[1],
+            dst=b_)
+        b_.to_host(c)
+        diff = numpy.fabs(c[8:28, 7:17, 6:11] - a[5:25, 4:14, 3:8]).max()
+        self.assertEqual(diff, 0)
+
+        # Copy 3D rect from host buffer to device buffer
+        logging.debug("Testing host -> device memcpy_3d_async")
+        sz = a.itemsize
+        b_.memset32_async()
+        b_.memcpy_3d_async(
+            (3 * sz, 4, 5), (6 * sz, 7, 8), (5 * sz, 10, 20),
+            a.shape[2] * sz, a.shape[1], b.shape[2] * sz, b.shape[1],
+            src=a)
+        c[:] = 1.0e30
+        b_.to_host(c)
+        diff = numpy.fabs(c[8:28, 7:17, 6:11] - a[5:25, 4:14, 3:8]).max()
+        self.assertEqual(diff, 0)
+
+        # Copy 3D rect from device buffer to host buffer
+        logging.debug("Testing device -> host memcpy_3d_async")
+        sz = a.itemsize
+        c[:] = 1.0e30
+        a_.memcpy_3d_async(
+            (3 * sz, 4, 5), (6 * sz, 7, 8), (5 * sz, 10, 20),
+            a.shape[2] * sz, a.shape[1], b.shape[2] * sz, b.shape[1],
+            dst=c)
+        ctx.synchronize()
+        diff = numpy.fabs(c[8:28, 7:17, 6:11] - a[5:25, 4:14, 3:8]).max()
+        self.assertEqual(diff, 0)
+
+        logging.debug("EXIT: test_memcpy_3d_async")
 
 
 if __name__ == "__main__":
