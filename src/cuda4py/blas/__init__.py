@@ -43,6 +43,9 @@ from cuda4py.blas._cublas import (CUBLAS,
                                   CUBLAS_OP_T,
                                   CUBLAS_OP_C,
 
+                                  CUBLAS_POINTER_MODE_HOST,
+                                  CUBLAS_POINTER_MODE_DEVICE,
+
                                   CUBLAS_STATUS_SUCCESS,
                                   CUBLAS_STATUS_NOT_INITIALIZED,
                                   CUBLAS_STATUS_ALLOC_FAILED,

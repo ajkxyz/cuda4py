@@ -82,6 +82,11 @@ CUBLAS_OP_T = 1
 CUBLAS_OP_C = 2
 
 
+#: cublasPointerMode_t
+CUBLAS_POINTER_MODE_HOST = 0
+CUBLAS_POINTER_MODE_DEVICE = 1
+
+
 def _initialize(backends):
     global lib
     if lib is not None:
@@ -93,6 +98,7 @@ def _initialize(backends):
     typedef int cublasStatus_t;
     typedef void *cublasHandle_t;
     typedef int cublasOperation_t;
+    typedef int cublasPointerMode_t;
 
     cublasStatus_t cublasCreate_v2(cublasHandle_t *handle);
     cublasStatus_t cublasDestroy_v2(cublasHandle_t handle);
@@ -127,6 +133,9 @@ def _initialize(backends):
         size_t beta,
         size_t C,
         int ldc);
+
+    cublasStatus_t cublasSetPointerMode_v2(cublasHandle_t handle,
+                                           cublasPointerMode_t mode);
     """
 
     # Parse
@@ -184,6 +193,17 @@ class CUBLAS(object):
     @property
     def context(self):
         return self._context
+
+    def set_pointer_mode(self, mode=CUBLAS_POINTER_MODE_DEVICE):
+        """Sets the pointer mode used by the cuBLAS library.
+
+        Parameters:
+            mode: CUBLAS_POINTER_MODE_HOST or CUBLAS_POINTER_MODE_DEVICE
+                  (the default cuBLAS mode is CUBLAS_POINTER_MODE_HOST).
+        """
+        err = self._lib.cublasSetPointerMode_v2(self._handle, mode)
+        if err:
+            raise CU.error("cublasSetPointerMode_v2", err)
 
     def sgemm(self, transA, transB,
               rowsCountA, columnCountB, commonSideLength,

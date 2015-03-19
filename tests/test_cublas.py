@@ -72,6 +72,9 @@ class Test(unittest.TestCase):
         self.assertEqual(blas.CUBLAS_OP_T, 1)
         self.assertEqual(blas.CUBLAS_OP_C, 2)
 
+        self.assertEqual(blas.CUBLAS_POINTER_MODE_HOST, 0)
+        self.assertEqual(blas.CUBLAS_POINTER_MODE_DEVICE, 1)
+
         self.assertEqual(blas.CUBLAS_STATUS_SUCCESS, 0)
         self.assertEqual(blas.CUBLAS_STATUS_NOT_INITIALIZED, 1)
         self.assertEqual(blas.CUBLAS_STATUS_ALLOC_FAILED, 3)
@@ -88,6 +91,12 @@ class Test(unittest.TestCase):
         self.assertGreater(idx, 0)
 
     def _test_gemm(self, gemm, dtype):
+        for mode in (blas.CUBLAS_POINTER_MODE_HOST,
+                     blas.CUBLAS_POINTER_MODE_DEVICE):
+            self._test_gemm_with_mode(gemm, dtype, mode)
+
+    def _test_gemm_with_mode(self, gemm, dtype, mode):
+        self.blas.set_pointer_mode(mode)
         a = numpy.zeros([127, 353], dtype=dtype)
         b = numpy.zeros([135, a.shape[1]], dtype=dtype)
         c = numpy.zeros([a.shape[0], b.shape[0]], dtype=dtype)
@@ -101,20 +110,32 @@ class Test(unittest.TestCase):
         a_buf = cu.MemAlloc(self.ctx, a.nbytes)
         b_buf = cu.MemAlloc(self.ctx, b.nbytes)
         c_buf = cu.MemAlloc(self.ctx, c.nbytes * 2)
+
         alpha = numpy.ones(1, dtype=dtype)
         beta = numpy.zeros(1, dtype=dtype)
+        if mode == blas.CUBLAS_POINTER_MODE_DEVICE:
+            alpha = cu.MemAlloc(self.ctx, alpha)
+            beta = cu.MemAlloc(self.ctx, beta)
+
         a_buf.to_device_async(a)
         b_buf.to_device_async(b)
         c_buf.to_device_async(c)
         c_buf.to_device_async(c, c.nbytes)
+
         gemm(blas.CUBLAS_OP_T, blas.CUBLAS_OP_N,
              b.shape[0], a.shape[0], a.shape[1],
              alpha, b_buf, a_buf, beta, c_buf)
+
         c_buf.to_host(c)
         max_diff = numpy.fabs(c - gold_c).max()
         self.assertLess(max_diff, 0.0001)
         c_buf.to_host(c, c.nbytes)
         max_diff = numpy.fabs(c).max()
+
+        # To avoid destructor call before gemm completion
+        del beta
+        del alpha
+
         self.assertEqual(max_diff, 0,
                          "Written some values outside of the target array")
 
