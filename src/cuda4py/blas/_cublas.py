@@ -297,6 +297,15 @@ class CUBLAS(object):
         if err:
             raise CU.error("cublasDgemm_v2", err)
 
+    @staticmethod
+    def gemm(dtype):
+        import numpy
+        if dtype == numpy.float32:
+            return CUBLAS.sgemm
+        if dtype == numpy.float64:
+            return CUBLAS.dgemm
+        raise ValueError("Invalid dtype %s" % dtype)
+
     def release(self):
         if self._lib is not None and self._handle is not None:
             self._lib.cublasDestroy_v2(self._handle)
