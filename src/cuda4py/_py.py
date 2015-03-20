@@ -403,22 +403,24 @@ class Memory(CU):
         if err:
             raise CU.error("cuMemcpy3DAsync_v2", err)
 
-    def _release(self):
+    def _release_mem(self):
         """Do actual memory release in child class.
 
         self.handle garanted to be not None.
         """
         raise NotImplementedError()
 
-    def release(self):
+    def _release(self):
         """Releases allocation.
         """
         if self.handle is not None:
-            self._release()
+            self._release_mem()
             self._handle = None
 
     def __del__(self):
-        self.release()
+        if self.context.handle is None:
+            raise SystemError("Incorrect destructor call order detected")
+        self._release()
 
 
 class MemAlloc(Memory):
@@ -435,7 +437,7 @@ class MemAlloc(Memory):
             raise CU.error("cuMemAlloc_v2", err)
         self._handle = int(ptr[0])
 
-    def _release(self):
+    def _release_mem(self):
         self._lib.cuMemFree_v2(self.handle)
 
 
@@ -457,7 +459,7 @@ class MemAllocManaged(Memory):
             raise CU.error("cuMemAllocManaged", err)
         self._handle = int(ptr[0])
 
-    def _release(self):
+    def _release_mem(self):
         self._lib.cuMemFree_v2(self.handle)
 
 
@@ -494,7 +496,7 @@ class MemHostAlloc(Memory):
     def buffer(self):
         return cu.ffi.buffer(cu.ffi.cast("void *", self.handle), self.size)
 
-    def _release(self):
+    def _release_mem(self):
         self._lib.cuMemFreeHost(self.handle)
 
 
@@ -750,7 +752,7 @@ class Module(CU):
             raise CU.error("cuModuleGetGlobal_v2", err)
         return int(ptr[0]), int(sz[0])
 
-    def release(self):
+    def _release(self):
         if self.handle is not None:
             with self.context:
                 self.context.synchronize()
@@ -758,7 +760,9 @@ class Module(CU):
             self._handle = None
 
     def __del__(self):
-        self.release()
+        if self.context.handle is None:
+            raise SystemError("Incorrect destructor call order detected")
+        self._release()
 
 
 class Context(CU):
@@ -832,21 +836,22 @@ class Context(CU):
         return ctx[0]
 
     def __enter__(self):
-        if self.handle is not None:
-            self.push_current()
+        if self.handle is None:
+            raise SystemError("Incorrect destructor call order detected")
+        self.push_current()
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
         if self.handle is not None:
             self._lib.cuCtxPopCurrent_v2(cu.ffi.new("CUcontext *"))
 
-    def release(self):
+    def _release(self):
         if self.handle is not None:
             self._lib.cuCtxDestroy_v2(self.handle)
             self._handle = None
 
     def __del__(self):
-        self.release()
+        self._release()
 
 
 class Device(CU):

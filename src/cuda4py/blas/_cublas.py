@@ -326,10 +326,12 @@ class CUBLAS(object):
             return CUBLAS.dgemm
         raise ValueError("Invalid dtype %s" % dtype)
 
-    def release(self):
+    def _release(self):
         if self._lib is not None and self._handle is not None:
             self._lib.cublasDestroy_v2(self._handle)
             self._handle = None
 
     def __del__(self):
-        self.release()
+        if self.context.handle is None:
+            raise SystemError("Incorrect destructor call order detected")
+        self._release()

@@ -421,7 +421,7 @@ class Test(unittest.TestCase):
         logging.debug("ENTER: test_memcpy_3d_async")
 
         p_copy = cu.ffi.new("CUDA_MEMCPY3D *")
-        assert cu.ffi.sizeof(p_copy[0]) == 200
+        self.assertEqual(cu.ffi.sizeof(p_copy[0]), 200)
 
         ctx = cu.Devices().create_some_context()
         logging.debug("Context created")
