@@ -207,6 +207,7 @@ class Memory(CU):
     """
     def __init__(self, context, size_or_ndarray, flags=0):
         super(Memory, self).__init__()
+        context._add_ref(self)
         self._context = context
         size = getattr(size_or_ndarray, "nbytes", size_or_ndarray)
         self._size = size
@@ -421,6 +422,7 @@ class Memory(CU):
         if self.context.handle is None:
             raise SystemError("Incorrect destructor call order detected")
         self._release()
+        self.context._del_ref(self)
 
 
 class MemAlloc(Memory):
@@ -657,6 +659,7 @@ class Module(CU):
                 example: ("-cubin", "-lcudadevrt", "-lcublas_device", "-dlink")
         """
         super(Module, self).__init__()
+        context._add_ref(self)
         self._context = context
         self._ptx = None
         self._stdout = None
@@ -763,15 +766,25 @@ class Module(CU):
         if self.context.handle is None:
             raise SystemError("Incorrect destructor call order detected")
         self._release()
+        self.context._del_ref(self)
 
 
 class Context(CU):
     """Holds CUDA context associated with the selected Device.
+
+    Attributes:
+        _handle: cffi handle for CUDA context.
+        _n_refs: reference count as a workaround for possible
+                 incorrect destructor call order, see
+                 http://bugs.python.org/issue23720
+                 (weakrefs do not help here).
     """
     default_flags = cu.CU_CTX_SCHED_AUTO | cu.CU_CTX_MAP_HOST
+    context_count = 0  # number of active contexts
 
     def __init__(self, device, flags=0):
         super(Context, self).__init__()
+        self._n_refs = 1
         ctx = cu.ffi.new("CUcontext *")
         err = self._lib.cuCtxCreate_v2(
             ctx, flags if flags else Context.default_flags, device.handle)
@@ -779,6 +792,15 @@ class Context(CU):
             raise CU.error("cuCtxCreate_v2", err)
         self._handle = ctx[0]
         self.device = device
+        Context.context_count += 1
+
+    def _add_ref(self, obj):
+        self._n_refs += 1
+
+    def _del_ref(self, obj):
+        self._n_refs -= 1
+        if self._n_refs <= 0:
+            self._release()
 
     def synchronize(self):
         if self.handle is None:
@@ -849,9 +871,10 @@ class Context(CU):
         if self.handle is not None:
             self._lib.cuCtxDestroy_v2(self.handle)
             self._handle = None
+            Context.context_count -= 1
 
     def __del__(self):
-        self._release()
+        self._del_ref(self)
 
 
 class Device(CU):

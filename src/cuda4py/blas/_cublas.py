@@ -178,6 +178,7 @@ class CUBLAS(object):
     def __init__(self, context):
         self._context = context
         self._lib = None
+        context._add_ref(self)
         initialize()
         handle = ffi.new("cublasHandle_t *")
         with context:
@@ -335,3 +336,4 @@ class CUBLAS(object):
         if self.context.handle is None:
             raise SystemError("Incorrect destructor call order detected")
         self._release()
+        self.context._del_ref(self)
