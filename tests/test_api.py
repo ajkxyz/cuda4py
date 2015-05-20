@@ -173,12 +173,12 @@ class Test(unittest.TestCase):
 
         h, h0 = self._run_on_thread(self._check_push_pop, (ctx,))
         self.assertEqual(h, ctx.handle)
-        self.assertEqual(h0, cu.NULL)
+        self.assertEqual(h0, cu.get_ffi().NULL)
         logging.debug("push/pop succeeded")
 
         h, h0 = self._run_on_thread(self._check_with, (ctx,))
         self.assertEqual(h, ctx.handle)
-        self.assertEqual(h0, cu.NULL)
+        self.assertEqual(h0, cu.get_ffi().NULL)
         logging.debug("with succeeded")
 
         self.assertEqual(
@@ -420,8 +420,8 @@ class Test(unittest.TestCase):
     def test_memcpy_3d_async(self):
         logging.debug("ENTER: test_memcpy_3d_async")
 
-        p_copy = cu.ffi.new("CUDA_MEMCPY3D *")
-        self.assertEqual(cu.ffi.sizeof(p_copy[0]), 200)
+        p_copy = cu.get_ffi().new("CUDA_MEMCPY3D *")
+        self.assertEqual(cu.get_ffi().sizeof(p_copy[0]), 200)
 
         ctx = cu.Devices().create_some_context()
         logging.debug("Context created")

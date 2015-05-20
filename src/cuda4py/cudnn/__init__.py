@@ -34,26 +34,20 @@ Original author: Alexey Kazantsev <a.kazantsev@samsung.com>
 """
 
 """
-Init module for BLAS cffi bindings and helper classes.
+Init module for CUDNN cffi bindings and helper classes.
 """
 
-from cuda4py.blas._cublas import (CUBLAS,
+from cuda4py.cudnn._cudnn import (CUDNN,
                                   initialize,
 
-                                  CUBLAS_OP_N,
-                                  CUBLAS_OP_T,
-                                  CUBLAS_OP_C,
-
-                                  CUBLAS_POINTER_MODE_HOST,
-                                  CUBLAS_POINTER_MODE_DEVICE,
-
-                                  CUBLAS_STATUS_SUCCESS,
-                                  CUBLAS_STATUS_NOT_INITIALIZED,
-                                  CUBLAS_STATUS_ALLOC_FAILED,
-                                  CUBLAS_STATUS_INVALID_VALUE,
-                                  CUBLAS_STATUS_ARCH_MISMATCH,
-                                  CUBLAS_STATUS_MAPPING_ERROR,
-                                  CUBLAS_STATUS_EXECUTION_FAILED,
-                                  CUBLAS_STATUS_INTERNAL_ERROR,
-                                  CUBLAS_STATUS_NOT_SUPPORTED,
-                                  CUBLAS_STATUS_LICENSE_ERROR)
+                                  CUDNN_STATUS_SUCCESS,
+                                  CUDNN_STATUS_NOT_INITIALIZED,
+                                  CUDNN_STATUS_ALLOC_FAILED,
+                                  CUDNN_STATUS_BAD_PARAM,
+                                  CUDNN_STATUS_INTERNAL_ERROR,
+                                  CUDNN_STATUS_INVALID_VALUE,
+                                  CUDNN_STATUS_ARCH_MISMATCH,
+                                  CUDNN_STATUS_MAPPING_ERROR,
+                                  CUDNN_STATUS_EXECUTION_FAILED,
+                                  CUDNN_STATUS_NOT_SUPPORTED,
+                                  CUDNN_STATUS_LICENSE_ERROR)

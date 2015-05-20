@@ -42,7 +42,7 @@ from cuda4py._py import CU
 
 
 #: ffi parser
-ffi = cffi.FFI()
+ffi = None
 
 
 #: Loaded shared library
@@ -140,6 +140,7 @@ def _initialize(backends):
 
     # Parse
     global ffi
+    ffi = cffi.FFI()
     ffi.cdef(src)
 
     # Load library
@@ -150,7 +151,7 @@ def _initialize(backends):
         except OSError:
             pass
     else:
-        ffi = cffi.FFI()  # reset before raise
+        ffi = None
         raise OSError("Could not load cublas library")
 
     global ERRORS
@@ -164,6 +165,8 @@ def _initialize(backends):
 
 
 def initialize(backends=("libcublas.so", "cublas64_65.dll")):
+    """Loads shared library.
+    """
     cuffi.initialize()
     global lib
     if lib is not None:
@@ -188,8 +191,6 @@ class CUBLAS(object):
             raise CU.error("cublasCreate_v2", err)
         self._lib = lib  # to hold the reference
         self._handle = handle[0]
-        self._kernels = {}
-        self._addr_bufs = {}
 
     @property
     def context(self):

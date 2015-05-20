@@ -37,10 +37,8 @@ Original author: Alexey Kazantsev <a.kazantsev@samsung.com>
 Init module.
 """
 
+from cuda4py import _cffi
 from cuda4py._cffi import (initialize,
-                           ffi,
-                           lib,
-                           NULL,
 
                            CU_CTX_SCHED_AUTO,
                            CU_CTX_SCHED_SPIN,
@@ -128,3 +126,9 @@ from cuda4py._py import (CUDARuntimeError,
                          Context,
                          Device,
                          Devices)
+
+
+def get_ffi():
+    """Returns CFFI() instance for the loaded shared library.
+    """
+    return _cffi.ffi

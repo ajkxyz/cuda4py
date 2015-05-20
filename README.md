@@ -11,6 +11,7 @@ exported functions should be marked as extern "C"
 Functions in plain PTX can be used without nvcc.
 
 To use CUBLAS, libcublas.so (cublas64_65.dll) should be present.
+To use CUDNN, libcudnn.so (cudnn64_65.dll) should be present.
 
 Not all CUDA api is currently covered.
 
@@ -37,6 +38,7 @@ for PyPy:
 ```bash
 PYTHONPATH=src pypy tests/test_api.py
 PYTHONPATH=src pypy tests/test_cublas.py
+PYTHONPATH=src pypy tests/test_cudnn.py
 ```
 
 Currently, PyPy numpy support may be incomplete,
