@@ -174,8 +174,7 @@ class CU(object):
             host_ptr = host_array.handle
         else:
             host_ptr = host_array
-        return (cu.ffi.NULL if host_ptr is None
-                else int(cu.ffi.cast("size_t", host_ptr)))
+        return 0 if host_ptr is None else int(cu.ffi.cast("size_t", host_ptr))
 
     @staticmethod
     def extract_ptr_and_size(host_array, size):
@@ -195,7 +194,7 @@ class CU(object):
             if size is None:
                 raise ValueError("size should be set "
                                  "in case of non-numpy host_array")
-        return (cu.ffi.NULL if host_ptr is None
+        return (0 if host_ptr is None
                 else int(cu.ffi.cast("size_t", host_ptr)), size)
 
 

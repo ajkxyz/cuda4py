@@ -128,6 +128,19 @@ class Test(unittest.TestCase):
         self.assertGreaterEqual(d.multi_gpu_board_group_id, 0)
         self.assertGreaterEqual(d.max_pitch, 0)
 
+    def test_extract_ptr(self):
+        a = numpy.zeros(127, dtype=numpy.float32)
+        ptr = cu.CU.extract_ptr(a)
+        self.assertEqual(ptr, int(a.__array_interface__["data"][0]))
+        ptr2, sz = cu.CU.extract_ptr_and_size(a, None)
+        self.assertEqual(ptr, ptr2)
+        self.assertEqual(sz, a.nbytes)
+        ptr = cu.CU.extract_ptr(None)
+        self.assertEqual(ptr, 0)
+        ptr2, sz = cu.CU.extract_ptr_and_size(None, 0)
+        self.assertEqual(ptr2, 0)
+        self.assertEqual(sz, 0)
+
     def test_dump_devices(self):
         logging.debug("ENTER: test_dump_devices")
         logging.debug("Available CUDA devices:\n%s",
