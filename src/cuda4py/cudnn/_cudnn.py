@@ -210,6 +210,15 @@ def _initialize(backends):
         const intptr_t beta,
         const cudnnTensorDescriptor_t destDesc,
         intptr_t destData);
+
+    cudnnStatus_t cudnnConvolutionBackwardBias(
+        cudnnHandle_t handle,
+        const intptr_t alpha,
+        const cudnnTensorDescriptor_t srcDesc,
+        const intptr_t srcData,
+        const intptr_t beta,
+        const cudnnTensorDescriptor_t destDesc,
+        intptr_t destData);
     """
 
     # Parse
@@ -447,8 +456,8 @@ class CUDNN(object):
         """Does convolution forward propagation.
 
         Parameters:
-            alpha: numpy array.
-            beta: numpy array.
+            alpha: src_data multiplier (numpy array with one element).
+            beta: dest_data multiplier (numpy array with one element).
         """
         size = ffi.new("size_t *")
         err = self._lib.cudnnConvolutionForward(
@@ -459,6 +468,22 @@ class CUDNN(object):
         if err:
             raise CU.error("cudnnConvolutionForward", err)
         return int(size[0])
+
+    def convolution_backward_bias(self, alpha, src_desc, src_data,
+                                  beta, dest_desc, dest_data):
+        """Computes the convolution gradient with respect to the bias.
+
+        Parameters:
+            alpha: src_data multiplier (numpy array with one element).
+            beta: dest_data multiplier (numpy array with one element).
+            src_data: error for backpropagation.
+            dest_data: gradient for the bias.
+        """
+        err = self._lib.cudnnConvolutionBackwardBias(
+            self.handle, CU.extract_ptr(alpha), src_desc, src_data,
+            CU.extract_ptr(beta), dest_desc, dest_data)
+        if err:
+            raise CU.error("cudnnConvolutionBackwardBias", err)
 
     def _release(self):
         if self._lib is not None and self.handle is not None:

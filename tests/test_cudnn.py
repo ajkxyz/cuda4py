@@ -228,6 +228,32 @@ class Test(unittest.TestCase):
 
         logging.debug("EXIT: test_convolution_forward")
 
+    def test_convolution_backward_bias(self):
+        logging.debug("ENTER: test_convolution_backward_bias")
+
+        bperr_data = numpy.zeros((100, 64, 104, 226), dtype=numpy.float32)
+        bperr_data[:] = 0.1
+        bperr_desc = cudnn.TensorDescriptor()
+        bperr_desc.set_4d(cudnn.CUDNN_TENSOR_NCHW, cudnn.CUDNN_DATA_FLOAT,
+                          *bperr_data.shape)
+        bperr_buf = cu.MemAlloc(self.ctx, bperr_data)
+
+        gd_data = numpy.zeros(64, dtype=numpy.float32)
+        gd_desc = cudnn.TensorDescriptor()
+        gd_desc.set_4d(cudnn.CUDNN_TENSOR_NCHW, cudnn.CUDNN_DATA_FLOAT,
+                       1, gd_data.size, 1, 1)
+        gd_buf = cu.MemAlloc(self.ctx, gd_data)
+
+        alpha = numpy.ones(1, dtype=numpy.float32)
+        beta = numpy.zeros(1, dtype=numpy.float32)
+        self.cudnn.convolution_backward_bias(alpha, bperr_desc, bperr_buf,
+                                             beta, gd_desc, gd_buf)
+
+        gd_buf.to_host(gd_data)
+        self.assertEqual(numpy.count_nonzero(gd_data), gd_data.size)
+
+        logging.debug("EXIT: test_convolution_backward_bias")
+
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
