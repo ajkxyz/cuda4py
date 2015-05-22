@@ -231,6 +231,18 @@ def _initialize(backends):
         const intptr_t beta,
         const cudnnFilterDescriptor_t gradDesc,
         intptr_t gradData);
+
+    cudnnStatus_t cudnnConvolutionBackwardData(
+        cudnnHandle_t handle,
+        const intptr_t alpha,
+        const cudnnFilterDescriptor_t filterDesc,
+        const intptr_t filterData,
+        const cudnnTensorDescriptor_t diffDesc,
+        const intptr_t diffData,
+        const cudnnConvolutionDescriptor_t convDesc,
+        const intptr_t beta,
+        const cudnnTensorDescriptor_t gradDesc,
+        intptr_t gradData);
     """
 
     # Parse
@@ -515,6 +527,25 @@ class CUDNN(object):
             CU.extract_ptr(beta), grad_desc, grad_data)
         if err:
             raise CU.error("cudnnConvolutionBackwardFilter", err)
+
+    def convolution_backward_data(
+            self, alpha, filter_desc, filter_data, diff_desc, diff_data,
+            conv_desc, beta, grad_desc, grad_data):
+        """Computes backpropagated error.
+
+        Parameters:
+            alpha: diff_data multiplier (numpy array with one element).
+            beta: grad_data multiplier (numpy array with one element).
+            filter_data: convolutional kernels.
+            diff_data: error for backpropagation.
+            grad_data: backpropagated error.
+        """
+        err = self._lib.cudnnConvolutionBackwardData(
+            self.handle, CU.extract_ptr(alpha), filter_desc, filter_data,
+            diff_desc, diff_data, conv_desc,
+            CU.extract_ptr(beta), grad_desc, grad_data)
+        if err:
+            raise CU.error("cudnnConvolutionBackwardData", err)
 
     def _release(self):
         if self._lib is not None and self.handle is not None:
