@@ -254,6 +254,48 @@ class Test(unittest.TestCase):
 
         logging.debug("EXIT: test_convolution_backward_bias")
 
+    def test_convolution_backward_filter(self):
+        logging.debug("ENTER: test_convolution_backward_filter")
+
+        conv_desc = cudnn.ConvolutionDescriptor()
+        conv_desc.set_2d(5, 5, 1, 1)
+
+        inp_data = numpy.zeros((100, 8, 96, 96), dtype=numpy.float32)
+        inp_data[:] = 0.1
+        inp_desc = cudnn.TensorDescriptor()
+        inp_desc.set_4d(cudnn.CUDNN_TENSOR_NCHW, cudnn.CUDNN_DATA_FLOAT,
+                        *inp_data.shape)
+        inp_buf = cu.MemAlloc(self.ctx, inp_data)
+
+        filter_data = numpy.zeros((64, 8, 11, 11), dtype=numpy.float32)
+        filter_data[:] = 0.1
+        filter_desc = cudnn.FilterDescriptor()
+        filter_desc.set_4d(cudnn.CUDNN_DATA_FLOAT, *filter_data.shape)
+        filter_buf = cu.MemAlloc(self.ctx, filter_data)
+
+        bperr_data = numpy.zeros((100, 64, 96, 96), dtype=numpy.float32)
+        bperr_data[:] = 0.1
+        bperr_desc = cudnn.TensorDescriptor()
+        bperr_desc.set_4d(cudnn.CUDNN_TENSOR_NCHW, cudnn.CUDNN_DATA_FLOAT,
+                          *bperr_data.shape)
+        bperr_buf = cu.MemAlloc(self.ctx, bperr_data)
+
+        gd_data = numpy.zeros_like(filter_data)
+        gd_desc = cudnn.FilterDescriptor()
+        gd_desc.set_4d(cudnn.CUDNN_DATA_FLOAT, *gd_data.shape)
+        gd_buf = cu.MemAlloc(self.ctx, gd_data)
+
+        alpha = numpy.ones(1, dtype=numpy.float32)
+        beta = numpy.zeros(1, dtype=numpy.float32)
+        self.cudnn.convolution_backward_filter(
+            alpha, inp_desc, inp_buf, bperr_desc, bperr_buf, conv_desc,
+            beta, gd_desc, gd_buf)
+
+        gd_buf.to_host(gd_data)
+        self.assertEqual(numpy.count_nonzero(gd_data), gd_data.size)
+
+        logging.debug("EXIT: test_convolution_backward_filter")
+
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)

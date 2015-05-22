@@ -219,6 +219,18 @@ def _initialize(backends):
         const intptr_t beta,
         const cudnnTensorDescriptor_t destDesc,
         intptr_t destData);
+
+    cudnnStatus_t cudnnConvolutionBackwardFilter(
+        cudnnHandle_t handle,
+        const intptr_t alpha,
+        const cudnnTensorDescriptor_t srcDesc,
+        const intptr_t srcData,
+        const cudnnTensorDescriptor_t diffDesc,
+        const intptr_t diffData,
+        const cudnnConvolutionDescriptor_t convDesc,
+        const intptr_t beta,
+        const cudnnFilterDescriptor_t gradDesc,
+        intptr_t gradData);
     """
 
     # Parse
@@ -471,7 +483,7 @@ class CUDNN(object):
 
     def convolution_backward_bias(self, alpha, src_desc, src_data,
                                   beta, dest_desc, dest_data):
-        """Computes the convolution gradient with respect to the bias.
+        """Computes gradient for the bias.
 
         Parameters:
             alpha: src_data multiplier (numpy array with one element).
@@ -484,6 +496,25 @@ class CUDNN(object):
             CU.extract_ptr(beta), dest_desc, dest_data)
         if err:
             raise CU.error("cudnnConvolutionBackwardBias", err)
+
+    def convolution_backward_filter(
+            self, alpha, src_desc, src_data, diff_desc, diff_data, conv_desc,
+            beta, grad_desc, grad_data):
+        """Computes gradient for the convolutional kernels.
+
+        Parameters:
+            alpha: src_data multiplier (numpy array with one element).
+            beta: grad_data multiplier (numpy array with one element).
+            src_data: input from the forward pass.
+            diff_data: error for backpropagation.
+            grad_data: gradient for convolutional kernels.
+        """
+        err = self._lib.cudnnConvolutionBackwardFilter(
+            self.handle, CU.extract_ptr(alpha), src_desc, src_data,
+            diff_desc, diff_data, conv_desc,
+            CU.extract_ptr(beta), grad_desc, grad_data)
+        if err:
+            raise CU.error("cudnnConvolutionBackwardFilter", err)
 
     def _release(self):
         if self._lib is not None and self.handle is not None:
