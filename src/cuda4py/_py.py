@@ -140,6 +140,9 @@ class CU(object):
         self._lib = cu.lib  # to hold the reference
         self._handle = None
 
+    def __int__(self):
+        return self.handle
+
     @property
     def handle(self):
         """Returns cffi handle to CUDA object.
@@ -171,7 +174,7 @@ class CU(object):
             host_ptr = host_array.handle
         else:
             host_ptr = host_array
-        return (cu.NULL if host_ptr is None
+        return (cu.ffi.NULL if host_ptr is None
                 else int(cu.ffi.cast("size_t", host_ptr)))
 
     @staticmethod
@@ -192,7 +195,7 @@ class CU(object):
             if size is None:
                 raise ValueError("size should be set "
                                  "in case of non-numpy host_array")
-        return (cu.NULL if host_ptr is None
+        return (cu.ffi.NULL if host_ptr is None
                 else int(cu.ffi.cast("size_t", host_ptr)), size)
 
 
@@ -220,11 +223,6 @@ class Memory(CU):
         """Call CUDA api to allocate memory here.
         """
         raise NotImplementedError()
-
-    def __int__(self):
-        """Returns address of the allocation.
-        """
-        return self.handle
 
     @property
     def context(self):
@@ -286,7 +284,7 @@ class Memory(CU):
         ptr, size = CU.extract_ptr_and_size(host_array, size)
         err = self._lib.cuMemcpyHtoDAsync_v2(
             self.handle + offs, ptr, size,
-            cu.NULL if stream is None else stream.handle)
+            0 if stream is None else stream)
         if err:
             raise CU.error("cuMemcpyHtoDAsync_v2", err)
 
@@ -305,7 +303,7 @@ class Memory(CU):
         err = self._lib.cuMemcpyDtoDAsync_v2(
             self.handle + dst_offs, int(src),
             self.size - dst_offs if size is None else size,
-            cu.NULL if stream is None else stream.handle)
+            0 if stream is None else stream)
         if err:
             raise CU.error("cuMemcpyDtoDAsync_v2", err)
 
@@ -323,7 +321,7 @@ class Memory(CU):
         err = self._lib.cuMemsetD32Async(
             self.handle + (offs << 2), value,
             (self.size >> 2) - offs if size is None else size,
-            cu.NULL if stream is None else stream.handle)
+            0 if stream is None else stream)
         if err:
             raise CU.error("cuMemsetD32Async", err)
 
@@ -400,7 +398,7 @@ class Memory(CU):
                 p_copy.dstMemoryType = cu.CU_MEMORYTYPE_HOST
 
         err = self._lib.cuMemcpy3DAsync_v2(
-            p_copy, cu.NULL if stream is None else stream.handle)
+            p_copy, 0 if stream is None else stream)
         if err:
             raise CU.error("cuMemcpy3DAsync_v2", err)
 
@@ -522,7 +520,7 @@ class Function(CU):
                 cu.ffi.new("char[]", name.encode("utf-8")))
         if err:
             raise CU.error("cuModuleGetFunction", err)
-        self._handle = func[0]
+        self._handle = int(func[0])
         # Holds references to the original python objects
         self._refs = []
         # Holds cffi data, copied from the original python objects
@@ -575,7 +573,7 @@ class Function(CU):
         block_size = cu.ffi.new("int *")
         err = self._lib.cuOccupancyMaxPotentialBlockSize(
             min_grid_size, block_size, self.handle,
-            cu.NULL if block_size_to_dynamic_smem_size is None else
+            cu.ffi.NULL if block_size_to_dynamic_smem_size is None else
             cu.ffi.callback("size_t(int)", block_size_to_dynamic_smem_size),
             dynamic_smem_size, block_size_limit)
         if err:
@@ -624,12 +622,12 @@ class Function(CU):
                 self._params = cu.ffi.new("void*[]", n)
                 self._params[0:n] = self._args[0:n]
             else:
-                self._params = cu.NULL
+                self._params = cu.ffi.NULL
         err = self._lib.cuLaunchKernel(
             self.handle, grid_dims[0], grid_dims[1], grid_dims[2],
             block_dims[0], block_dims[1], block_dims[2],
-            shared_mem_bytes, cu.NULL if stream is None else stream.handle,
-            self._params, cu.NULL)
+            shared_mem_bytes, 0 if stream is None else stream,
+            self._params, cu.ffi.NULL)
         if err:
             raise CU.error("cuLaunchKernel", err)
 
@@ -720,7 +718,7 @@ class Module(CU):
             err = self._lib.cuModuleLoadData(module, ptx)
         if err:
             raise CU.error("cuModuleLoadData", err)
-        self._handle = module[0]
+        self._handle = int(module[0])
 
     def create_function(self, name):
         return Function(self, name)
@@ -782,15 +780,29 @@ class Context(CU):
     default_flags = cu.CU_CTX_SCHED_AUTO | cu.CU_CTX_MAP_HOST
     context_count = 0  # number of active contexts
 
-    def __init__(self, device, flags=0):
+    def __init__(self, device, flags=0, handle=None):
+        """Initializes CUDA context.
+
+        Parameters:
+            device: Device instance or int.
+            flags: context creation flags.
+            handle: external context handle,
+                    if set, device and flags are ignored, and
+                    cuCtxDestroy_v2 will not be called in destructor.
+        """
         super(Context, self).__init__()
         self._n_refs = 1
-        ctx = cu.ffi.new("CUcontext *")
-        err = self._lib.cuCtxCreate_v2(
-            ctx, flags if flags else Context.default_flags, device.handle)
-        if err:
-            raise CU.error("cuCtxCreate_v2", err)
-        self._handle = ctx[0]
+        if handle is None:
+            ctx = cu.ffi.new("CUcontext *")
+            err = self._lib.cuCtxCreate_v2(
+                ctx, flags if flags else Context.default_flags, device)
+            if err:
+                raise CU.error("cuCtxCreate_v2", err)
+            self._handle = int(ctx[0])
+            self._own_handle = True
+        else:
+            self._handle = int(handle)
+            self._own_handle = False
         self.device = device
         Context.context_count += 1
 
@@ -869,7 +881,8 @@ class Context(CU):
 
     def _release(self):
         if self.handle is not None:
-            self._lib.cuCtxDestroy_v2(self.handle)
+            if self._own_handle:
+                self._lib.cuCtxDestroy_v2(self.handle)
             self._handle = None
             Context.context_count -= 1
 

@@ -37,17 +37,39 @@ Original author: Alexey Kazantsev <a.kazantsev@samsung.com>
 Init module for CUDNN cffi bindings and helper classes.
 """
 
-from cuda4py.cudnn._cudnn import (CUDNN,
-                                  initialize,
+from cuda4py.cudnn._cudnn import (
+    CUDNN,
+    TensorDescriptor,
+    FilterDescriptor,
+    ConvolutionDescriptor,
+    initialize,
 
-                                  CUDNN_STATUS_SUCCESS,
-                                  CUDNN_STATUS_NOT_INITIALIZED,
-                                  CUDNN_STATUS_ALLOC_FAILED,
-                                  CUDNN_STATUS_BAD_PARAM,
-                                  CUDNN_STATUS_INTERNAL_ERROR,
-                                  CUDNN_STATUS_INVALID_VALUE,
-                                  CUDNN_STATUS_ARCH_MISMATCH,
-                                  CUDNN_STATUS_MAPPING_ERROR,
-                                  CUDNN_STATUS_EXECUTION_FAILED,
-                                  CUDNN_STATUS_NOT_SUPPORTED,
-                                  CUDNN_STATUS_LICENSE_ERROR)
+    CUDNN_STATUS_SUCCESS,
+    CUDNN_STATUS_NOT_INITIALIZED,
+    CUDNN_STATUS_ALLOC_FAILED,
+    CUDNN_STATUS_BAD_PARAM,
+    CUDNN_STATUS_INTERNAL_ERROR,
+    CUDNN_STATUS_INVALID_VALUE,
+    CUDNN_STATUS_ARCH_MISMATCH,
+    CUDNN_STATUS_MAPPING_ERROR,
+    CUDNN_STATUS_EXECUTION_FAILED,
+    CUDNN_STATUS_NOT_SUPPORTED,
+    CUDNN_STATUS_LICENSE_ERROR,
+
+    CUDNN_DATA_FLOAT,
+    CUDNN_DATA_DOUBLE,
+
+    CUDNN_TENSOR_NCHW,
+    CUDNN_TENSOR_NHWC,
+
+    CUDNN_CONVOLUTION,
+    CUDNN_CROSS_CORRELATION,
+
+    CUDNN_CONVOLUTION_FWD_NO_WORKSPACE,
+    CUDNN_CONVOLUTION_FWD_PREFER_FASTEST,
+    CUDNN_CONVOLUTION_FWD_SPECIFY_WORKSPACE_LIMIT,
+
+    CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM,
+    CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_PRECOMP_GEMM,
+    CUDNN_CONVOLUTION_FWD_ALGO_GEMM,
+    CUDNN_CONVOLUTION_FWD_ALGO_DIRECT)

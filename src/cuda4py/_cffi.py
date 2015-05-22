@@ -41,15 +41,11 @@ import threading
 
 
 #: ffi parser
-ffi = cffi.FFI()
+ffi = None
 
 
 #: Loaded shared library
 lib = None
-
-
-#: cffi NULL pointer
-NULL = ffi.NULL
 
 
 #: Lock
@@ -249,15 +245,15 @@ def _initialize(backends):
     src = """
     typedef int CUresult;
     typedef int CUdevice;
-    typedef void *CUcontext;
-    typedef void *CUmodule;
-    typedef void *CUfunction;
-    typedef void *CUstream;
+    typedef size_t CUcontext;
+    typedef size_t CUmodule;
+    typedef size_t CUfunction;
+    typedef size_t CUstream;
     typedef size_t CUdeviceptr;
     typedef int CUdevice_attribute;
     typedef size_t (*CUoccupancyB2DSize)(int blockSize);
     typedef int CUmemorytype;
-    typedef void *CUarray;
+    typedef size_t CUarray;
 
     typedef struct CUDA_MEMCPY3D_st {
         size_t srcXInBytes;
@@ -392,6 +388,7 @@ def _initialize(backends):
 
     # Parse
     global ffi
+    ffi = cffi.FFI()
     ffi.cdef(src)
 
     # Load library
@@ -402,7 +399,7 @@ def _initialize(backends):
         except OSError:
             pass
     else:
-        ffi = cffi.FFI()  # reset before raise
+        ffi = None
         raise OSError("Could not load cuda library")
 
 

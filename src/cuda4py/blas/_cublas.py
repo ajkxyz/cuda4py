@@ -192,6 +192,13 @@ class CUBLAS(object):
         self._lib = lib  # to hold the reference
         self._handle = handle[0]
 
+    def __int__(self):
+        return self.handle
+
+    @property
+    def handle(self):
+        return self._handle
+
     @property
     def context(self):
         return self._context
@@ -203,7 +210,7 @@ class CUBLAS(object):
             mode: CUBLAS_POINTER_MODE_HOST or CUBLAS_POINTER_MODE_DEVICE
                   (the default cuBLAS mode is CUBLAS_POINTER_MODE_HOST).
         """
-        err = self._lib.cublasSetPointerMode_v2(self._handle, mode)
+        err = self._lib.cublasSetPointerMode_v2(self.handle, mode)
         if err:
             raise CU.error("cublasSetPointerMode_v2", err)
 
@@ -255,11 +262,9 @@ class CUBLAS(object):
         if not strideC:
             strideC = rowsCountA
         err = self._lib.cublasSgemm_v2(
-            self._handle, transA, transB, rowsCountA, columnCountB,
-            commonSideLength,
-            CU.extract_ptr(alpha), CU.extract_ptr(A), strideA,
-            CU.extract_ptr(B), strideB, CU.extract_ptr(beta),
-            CU.extract_ptr(C), strideC)
+            self.handle, transA, transB, rowsCountA, columnCountB,
+            commonSideLength, CU.extract_ptr(alpha), A, strideA,
+            B, strideB, CU.extract_ptr(beta), C, strideC)
         if err:
             raise CU.error("cublasSgemm_v2", err)
 
@@ -311,11 +316,9 @@ class CUBLAS(object):
         if not strideC:
             strideC = rowsCountA
         err = self._lib.cublasDgemm_v2(
-            self._handle, transA, transB, rowsCountA, columnCountB,
-            commonSideLength,
-            CU.extract_ptr(alpha), CU.extract_ptr(A), strideA,
-            CU.extract_ptr(B), strideB, CU.extract_ptr(beta),
-            CU.extract_ptr(C), strideC)
+            self.handle, transA, transB, rowsCountA, columnCountB,
+            commonSideLength, CU.extract_ptr(alpha), A, strideA,
+            B, strideB, CU.extract_ptr(beta), C, strideC)
         if err:
             raise CU.error("cublasDgemm_v2", err)
 
@@ -329,8 +332,8 @@ class CUBLAS(object):
         raise ValueError("Invalid dtype %s" % dtype)
 
     def _release(self):
-        if self._lib is not None and self._handle is not None:
-            self._lib.cublasDestroy_v2(self._handle)
+        if self._lib is not None and self.handle is not None:
+            self._lib.cublasDestroy_v2(self.handle)
             self._handle = None
 
     def __del__(self):

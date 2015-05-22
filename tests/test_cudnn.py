@@ -80,9 +80,153 @@ class Test(unittest.TestCase):
         self.assertEqual(cudnn.CUDNN_STATUS_NOT_SUPPORTED, 9)
         self.assertEqual(cudnn.CUDNN_STATUS_LICENSE_ERROR, 10)
 
+        self.assertEqual(cudnn.CUDNN_DATA_FLOAT, 0)
+        self.assertEqual(cudnn.CUDNN_DATA_DOUBLE, 1)
+
+        self.assertEqual(cudnn.CUDNN_TENSOR_NCHW, 0)
+        self.assertEqual(cudnn.CUDNN_TENSOR_NHWC, 1)
+
+        self.assertEqual(cudnn.CUDNN_CONVOLUTION, 0)
+        self.assertEqual(cudnn.CUDNN_CROSS_CORRELATION, 1)
+
+        self.assertEqual(cudnn.CUDNN_CONVOLUTION_FWD_NO_WORKSPACE, 0)
+        self.assertEqual(cudnn.CUDNN_CONVOLUTION_FWD_PREFER_FASTEST, 1)
+        self.assertEqual(
+            cudnn.CUDNN_CONVOLUTION_FWD_SPECIFY_WORKSPACE_LIMIT, 2)
+
+        self.assertEqual(cudnn.CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM, 0)
+        self.assertEqual(
+            cudnn.CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_PRECOMP_GEMM, 1)
+        self.assertEqual(cudnn.CUDNN_CONVOLUTION_FWD_ALGO_GEMM, 2)
+        self.assertEqual(cudnn.CUDNN_CONVOLUTION_FWD_ALGO_DIRECT, 3)
+
     def test_errors(self):
         idx = cu.CU.ERRORS[cudnn.CUDNN_STATUS_NOT_INITIALIZED].find(" | ")
         self.assertGreater(idx, 0)
+
+    def test_tensor_descriptor(self):
+        d = cudnn.TensorDescriptor()
+        self.assertIsNotNone(d.handle)
+        for dt in (cudnn.CUDNN_DATA_DOUBLE, cudnn.CUDNN_DATA_FLOAT):
+            for fmt in (cudnn.CUDNN_TENSOR_NCHW, cudnn.CUDNN_TENSOR_NHWC):
+                d.set_4d(fmt, dt, 100, 50, 217, 215)
+        del d
+
+    def test_filter_descriptor(self):
+        d = cudnn.FilterDescriptor()
+        self.assertIsNotNone(d.handle)
+        for dt in (cudnn.CUDNN_DATA_DOUBLE, cudnn.CUDNN_DATA_FLOAT):
+            d.set_4d(dt, 64, 3, 11, 12)
+        del d
+
+    def test_convolution_descriptor(self):
+        d = cudnn.ConvolutionDescriptor()
+        self.assertIsNotNone(d.handle)
+        for mode in (cudnn.CUDNN_CROSS_CORRELATION, cudnn.CUDNN_CONVOLUTION):
+            d.set_2d(1, 2, 3, 4, 1, 1, mode)
+        del d
+
+    def _init_descriptors(self, include_out=False):
+        conv = cudnn.ConvolutionDescriptor()
+        conv.set_2d(5, 4, 2, 1)
+        inp = cudnn.TensorDescriptor()
+        inp.set_4d(cudnn.CUDNN_TENSOR_NCHW, cudnn.CUDNN_DATA_FLOAT,
+                   100, 8, 208, 224)
+        filter = cudnn.FilterDescriptor()
+        filter.set_4d(cudnn.CUDNN_DATA_FLOAT, 64, 8, 11, 7)
+        if not include_out:
+            return conv, inp, filter
+        n, c, h, w = cudnn.CUDNN.get_convolution_2d_forward_output_dim(
+            conv, inp, filter)
+        out = cudnn.TensorDescriptor()
+        out.set_4d(cudnn.CUDNN_TENSOR_NCHW, cudnn.CUDNN_DATA_FLOAT, n, c, h, w)
+        return conv, inp, filter, out
+
+    def test_get_convolution_2d_forward_output_dim(self):
+        conv, inp, filter = self._init_descriptors()
+        n, c, h, w = cudnn.CUDNN.get_convolution_2d_forward_output_dim(
+            conv, inp, filter)
+        self.assertEqual(n, 100)
+        self.assertEqual(c, 64)
+        self.assertEqual(h, 104)
+        self.assertEqual(w, 226)
+
+    def test_get_convolutional_forward_algorithm(self):
+        logging.debug("ENTER: test_get_convolutional_forward_algorithm")
+        conv, inp, filter, out = self._init_descriptors(True)
+        algo = self.cudnn.get_convolution_forward_algorithm(
+            inp, filter, conv, out)
+        self.assertGreaterEqual(algo, 0)
+        logging.debug("Fastest algo: %d", algo)
+        algo = self.cudnn.get_convolution_forward_algorithm(
+            inp, filter, conv, out,
+            cudnn.CUDNN_CONVOLUTION_FWD_SPECIFY_WORKSPACE_LIMIT,
+            2 * 1024 * 1024 * 1024)
+        logging.debug("With 2Gb limit algo: %d", algo)
+        logging.debug("EXIT: test_get_convolutional_forward_algorithm")
+
+    def test_get_convolution_forward_workspace_size(self):
+        logging.debug("ENTER: test_get_convolution_forward_workspace_size")
+        conv, inp, filter, out = self._init_descriptors(True)
+        algo = self.cudnn.get_convolution_forward_algorithm(
+            inp, filter, conv, out)
+        for a in (algo, cudnn.CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM,
+                  cudnn.CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_PRECOMP_GEMM,
+                  cudnn.CUDNN_CONVOLUTION_FWD_ALGO_GEMM,
+                  cudnn.CUDNN_CONVOLUTION_FWD_ALGO_DIRECT):
+            try:
+                sz = self.cudnn.get_convolution_forward_workspace_size(
+                    inp, filter, conv, out, a)
+            except cu.CUDARuntimeError as e:
+                self.assertEqual(e.code, cudnn.CUDNN_STATUS_NOT_SUPPORTED)
+                continue
+            self.assertGreaterEqual(sz, 0)
+            logging.debug("algo=%d size=%d", a, sz)
+        logging.debug("EXIT: test_get_convolution_forward_workspace_size")
+
+    def test_convolution_forward(self):
+        logging.debug("ENTER: test_convolution_forward")
+
+        conv_desc = cudnn.ConvolutionDescriptor()
+        conv_desc.set_2d(5, 4, 2, 1)
+
+        inp_data = numpy.zeros((100, 8, 104, 112), dtype=numpy.float32)
+        inp_data[:] = 0.1
+        inp_desc = cudnn.TensorDescriptor()
+        inp_desc.set_4d(cudnn.CUDNN_TENSOR_NCHW, cudnn.CUDNN_DATA_FLOAT,
+                        *inp_data.shape)
+        inp_buf = cu.MemAlloc(self.ctx, inp_data)
+
+        filter_data = numpy.zeros((64, 8, 11, 7), dtype=numpy.float32)
+        filter_data[:] = 0.3
+        filter_desc = cudnn.FilterDescriptor()
+        filter_desc.set_4d(cudnn.CUDNN_DATA_FLOAT, *filter_data.shape)
+        filter_buf = cu.MemAlloc(self.ctx, filter_data)
+
+        n, c, h, w = cudnn.CUDNN.get_convolution_2d_forward_output_dim(
+            conv_desc, inp_desc, filter_desc)
+        out_data = numpy.zeros((n, c, h, w), dtype=numpy.float32)
+        out_desc = cudnn.TensorDescriptor()
+        out_desc.set_4d(cudnn.CUDNN_TENSOR_NCHW, cudnn.CUDNN_DATA_FLOAT,
+                        *out_data.shape)
+        out_buf = cu.MemAlloc(self.ctx, out_data)
+
+        workspace = cu.MemAlloc(self.ctx, 512 * 1024 * 1024)
+        algo = self.cudnn.get_convolution_forward_algorithm(
+            inp_desc, filter_desc, conv_desc, out_desc,
+            cudnn.CUDNN_CONVOLUTION_FWD_SPECIFY_WORKSPACE_LIMIT,
+            workspace.size)
+
+        alpha = numpy.ones(1, dtype=numpy.float32)
+        beta = numpy.zeros(1, dtype=numpy.float32)
+        self.cudnn.convolution_forward(
+            alpha, inp_desc, inp_buf, filter_desc, filter_buf, conv_desc,
+            algo, workspace, workspace.size, beta, out_desc, out_buf)
+
+        out_buf.to_host(out_data)
+        self.assertEqual(numpy.count_nonzero(out_data), out_data.size)
+
+        logging.debug("EXIT: test_convolution_forward")
 
 
 if __name__ == "__main__":

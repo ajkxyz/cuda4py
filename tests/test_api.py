@@ -173,12 +173,12 @@ class Test(unittest.TestCase):
 
         h, h0 = self._run_on_thread(self._check_push_pop, (ctx,))
         self.assertEqual(h, ctx.handle)
-        self.assertEqual(h0, cu.get_ffi().NULL)
+        self.assertEqual(h0, 0)
         logging.debug("push/pop succeeded")
 
         h, h0 = self._run_on_thread(self._check_with, (ctx,))
         self.assertEqual(h, ctx.handle)
-        self.assertEqual(h0, cu.get_ffi().NULL)
+        self.assertEqual(h0, 0)
         logging.debug("with succeeded")
 
         self.assertEqual(
