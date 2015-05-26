@@ -243,6 +243,15 @@ def _initialize(backends):
         const intptr_t beta,
         const cudnnTensorDescriptor_t gradDesc,
         intptr_t gradData);
+
+    cudnnStatus_t cudnnTransformTensor(
+        cudnnHandle_t handle,
+        const intptr_t alpha,
+        const cudnnTensorDescriptor_t srcDesc,
+        const intptr_t srcData,
+        const intptr_t beta,
+        const cudnnTensorDescriptor_t destDesc,
+        intptr_t destData);
     """
 
     # Parse
@@ -546,6 +555,21 @@ class CUDNN(object):
             CU.extract_ptr(beta), grad_desc, grad_data)
         if err:
             raise CU.error("cudnnConvolutionBackwardData", err)
+
+    def transform_tensor(self, alpha, src_desc, src_data,
+                         beta, dest_desc, dest_data):
+        """Transforms data from one layout to another
+        (interleaved to splitted for example).
+
+        Parameters:
+            alpha: src_data multiplier (numpy array with one element).
+            beta: dest_data multiplier (numpy array with one element).
+        """
+        err = self._lib.cudnnTransformTensor(
+            self.handle, CU.extract_ptr(alpha), src_desc, src_data,
+            CU.extract_ptr(beta), dest_desc, dest_data)
+        if err:
+            raise CU.error("cudnnTransformTensor", err)
 
     def _release(self):
         if self._lib is not None and self.handle is not None:

@@ -332,6 +332,36 @@ class Test(unittest.TestCase):
 
         logging.debug("EXIT: test_convolution_backward_data")
 
+    def test_transform_tensor(self):
+        logging.debug("ENTER: test_transform_tensor")
+
+        sh_interleaved = (2, 5, 5, 3)
+        sh_splitted = (2, 3, 5, 5)
+
+        inp_data = numpy.arange(numpy.prod(sh_interleaved),
+                                dtype=numpy.float32).reshape(sh_interleaved)
+        inp_desc = cudnn.TensorDescriptor()
+        inp_desc.set_4d(cudnn.CUDNN_TENSOR_NHWC, cudnn.CUDNN_DATA_FLOAT,
+                        *sh_splitted)
+        inp_buf = cu.MemAlloc(self.ctx, inp_data)
+
+        out_data = numpy.zeros(sh_splitted, dtype=numpy.float32)
+        out_desc = cudnn.TensorDescriptor()
+        out_desc.set_4d(cudnn.CUDNN_TENSOR_NCHW, cudnn.CUDNN_DATA_FLOAT,
+                        *sh_splitted)
+        out_buf = cu.MemAlloc(self.ctx, out_data)
+
+        alpha = numpy.ones(1, dtype=numpy.float32)
+        beta = numpy.zeros(1, dtype=numpy.float32)
+        self.cudnn.transform_tensor(alpha, inp_desc, inp_buf,
+                                    beta, out_desc, out_buf)
+        out_buf.to_host(out_data)
+
+        max_diff = numpy.fabs(out_data - inp_data.transpose(0, 3, 1, 2)).max()
+        self.assertEqual(max_diff, 0.0)
+
+        logging.debug("EXIT: test_transform_tensor")
+
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
