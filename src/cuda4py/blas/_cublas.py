@@ -82,6 +82,13 @@ CUBLAS_OP_T = 1
 CUBLAS_OP_C = 2
 
 
+#: cublasDataType_t
+CUBLAS_DATA_FLOAT = 0
+CUBLAS_DATA_DOUBLE = 1
+CUBLAS_DATA_HALF = 2
+CUBLAS_DATA_INT8 = 3
+
+
 #: cublasPointerMode_t
 CUBLAS_POINTER_MODE_HOST = 0
 CUBLAS_POINTER_MODE_DEVICE = 1
@@ -99,6 +106,7 @@ def _initialize(backends):
     typedef void *cublasHandle_t;
     typedef int cublasOperation_t;
     typedef int cublasPointerMode_t;
+    typedef int cublasDataType_t;
 
     cublasStatus_t cublasCreate_v2(cublasHandle_t *handle);
     cublasStatus_t cublasDestroy_v2(cublasHandle_t handle);
@@ -132,6 +140,24 @@ def _initialize(backends):
         int ldb,
         size_t beta,
         size_t C,
+        int ldc);
+    cublasStatus_t cublasSgemmEx(
+        cublasHandle_t handle,
+        cublasOperation_t transa,
+        cublasOperation_t transb,
+        int m,
+        int n,
+        int k,
+        size_t alpha,
+        size_t A,
+        cublasDataType_t Atype,
+        int lda,
+        size_t B,
+        cublasDataType_t Btype,
+        int ldb,
+        size_t beta,
+        size_t C,
+        cublasDataType_t Ctype,
         int ldc);
 
     cublasStatus_t cublasSetPointerMode_v2(cublasHandle_t handle,
@@ -322,6 +348,63 @@ class CUBLAS(object):
         if err:
             raise CU.error("cublasDgemm_v2", err)
 
+    def sgemm_ex(self, transA, transB,
+                 rowsCountA, columnCountB, commonSideLength,
+                 alpha, A, B, beta, C,
+                 strideA=0, strideB=0, strideC=0,
+                 dtypeA=CUBLAS_DATA_HALF, dtypeB=CUBLAS_DATA_HALF,
+                 dtypeC=CUBLAS_DATA_HALF):
+        """Single precision (float) GEneral Matrix Multiplication
+        with support of different data types for each matrix.
+
+        Matrices are always in column order.
+
+        C = alpha * dot(A, B) + beta * C
+        C = alpha * dot(A^T, B) + beta * C
+        C = alpha * dot(A, B^T) + beta * C
+        C = alpha * dot(A^T, B^T) + beta * C
+
+        alpha, A, B, beta, C can be numpy array, Memory object,
+        cffi pointer or int.
+
+        Parameters:
+            transA: how matrix A is to be transposed
+                    (CUBLAS_OP_N, CUBLAS_OP_T, CUBLAS_OP_C).
+            transB: how matrix B is to be transposed
+                    (CUBLAS_OP_N, CUBLAS_OP_T, CUBLAS_OP_C).
+            rowsCountA: number of rows in matrix A.
+            columnCountB: number of columns in matrix B.
+            commonSideLength: length of the common side of the matrices.
+            alpha: the factor of matrix A.
+            A: matrix A.
+            B: matrix B.
+            beta: the factor of matrix C.
+            C: Buffer object storing matrix C.
+            strideA: leading dimension of matrix A:
+                     clblasTrans: >= commonSideLength,
+                     else: >= rowsCountA.
+            strideB: leading dimension of matrix B:
+                     clblasTrans: >= columnCountB,
+                     else: >= commonSideLength.
+            strideC: leading dimension of matrix C: >= rowsCountA.
+
+        Returns:
+            None.
+        """
+        if not strideA:
+            strideA = commonSideLength if transA != CUBLAS_OP_N else rowsCountA
+        if not strideB:
+            strideB = (columnCountB if transB != CUBLAS_OP_N
+                       else commonSideLength)
+        if not strideC:
+            strideC = rowsCountA
+        err = self._lib.cublasSgemmEx(
+            self.handle, transA, transB, rowsCountA, columnCountB,
+            commonSideLength, CU.extract_ptr(alpha), A, dtypeA, strideA,
+            B, dtypeB, strideB, CU.extract_ptr(beta), C, dtypeC, strideC)
+        if err:
+            raise CU.error("cublasSgemmEx", err)
+
     @staticmethod
     def gemm(dtype):
         import numpy
@@ -329,6 +412,8 @@ class CUBLAS(object):
             return CUBLAS.sgemm
         if dtype == numpy.float64:
             return CUBLAS.dgemm
+        if dtype == numpy.float16:
+            return CUBLAS.sgemm_ex
         raise ValueError("Invalid dtype %s" % dtype)
 
     def _release(self):

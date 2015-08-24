@@ -44,6 +44,11 @@ from cuda4py.blas._cublas import (CUBLAS,
                                   CUBLAS_OP_T,
                                   CUBLAS_OP_C,
 
+                                  CUBLAS_DATA_FLOAT,
+                                  CUBLAS_DATA_DOUBLE,
+                                  CUBLAS_DATA_HALF,
+                                  CUBLAS_DATA_INT8,
+
                                   CUBLAS_POINTER_MODE_HOST,
                                   CUBLAS_POINTER_MODE_DEVICE,
 

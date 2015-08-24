@@ -72,6 +72,11 @@ class Test(unittest.TestCase):
         self.assertEqual(blas.CUBLAS_OP_T, 1)
         self.assertEqual(blas.CUBLAS_OP_C, 2)
 
+        self.assertEqual(blas.CUBLAS_DATA_FLOAT, 0)
+        self.assertEqual(blas.CUBLAS_DATA_DOUBLE, 1)
+        self.assertEqual(blas.CUBLAS_DATA_HALF, 2)
+        self.assertEqual(blas.CUBLAS_DATA_INT8, 3)
+
         self.assertEqual(blas.CUBLAS_POINTER_MODE_HOST, 0)
         self.assertEqual(blas.CUBLAS_POINTER_MODE_DEVICE, 1)
 
@@ -106,13 +111,16 @@ class Test(unittest.TestCase):
             pass
         a[:] = numpy.random.rand(a.size).astype(dtype).reshape(a.shape) - 0.5
         b[:] = numpy.random.rand(b.size).astype(dtype).reshape(b.shape) - 0.5
-        gold_c = numpy.dot(a, b.transpose())
+        gold_c = numpy.dot(a.astype(numpy.float64),
+                           b.transpose().astype(numpy.float64))
         a_buf = cu.MemAlloc(self.ctx, a.nbytes)
         b_buf = cu.MemAlloc(self.ctx, b.nbytes)
         c_buf = cu.MemAlloc(self.ctx, c.nbytes * 2)
 
-        alpha = numpy.ones(1, dtype=dtype)
-        beta = numpy.zeros(1, dtype=dtype)
+        alpha = numpy.ones(
+            1, dtype={numpy.float16: numpy.float32}.get(dtype, dtype))
+        beta = numpy.zeros(
+            1, dtype={numpy.float16: numpy.float32}.get(dtype, dtype))
         if mode == blas.CUBLAS_POINTER_MODE_DEVICE:
             alpha = cu.MemAlloc(self.ctx, alpha)
             beta = cu.MemAlloc(self.ctx, beta)
@@ -127,8 +135,11 @@ class Test(unittest.TestCase):
              alpha, b_buf, a_buf, beta, c_buf)
 
         c_buf.to_host(c)
-        max_diff = numpy.fabs(c - gold_c).max()
-        self.assertLess(max_diff, 0.0001)
+        max_diff = numpy.fabs(gold_c - c.astype(numpy.float64)).max()
+        logging.debug("Maximum difference is %.6f", max_diff)
+        self.assertLess(
+            max_diff, {numpy.float32: 1.0e-5, numpy.float64: 1.0e-13,
+                       numpy.float16: 3.0e-3}[dtype])
         c_buf.to_host(c, c.nbytes)
         max_diff = numpy.fabs(c).max()
 
@@ -150,6 +161,12 @@ class Test(unittest.TestCase):
         with self.ctx:
             self._test_gemm(self.blas.dgemm, numpy.float64)
         logging.debug("EXIT: test_dgemm")
+
+    def test_sgemm_ex(self):
+        logging.debug("ENTER: test_sgemm_ex")
+        with self.ctx:
+            self._test_gemm(self.blas.sgemm_ex, numpy.float16)
+        logging.debug("EXIT: test_sgemm_ex")
 
     def test_kernel(self):
         logging.debug("ENTER: test_kernel")
