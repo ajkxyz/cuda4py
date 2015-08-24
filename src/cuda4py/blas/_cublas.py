@@ -387,6 +387,15 @@ class CUBLAS(object):
                      clblasTrans: >= columnCountB,
                      else: >= commonSideLength.
             strideC: leading dimension of matrix C: >= rowsCountA.
+            dtypeA: data type of matrix A
+                    (CUBLAS_DATA_FLOAT, CUBLAS_DATA_DOUBLE,
+                     CUBLAS_DATA_HALF, CUBLAS_DATA_INT8).
+            dtypeB: data type of matrix B
+                    (CUBLAS_DATA_FLOAT, CUBLAS_DATA_DOUBLE,
+                     CUBLAS_DATA_HALF, CUBLAS_DATA_INT8).
+            dtypeC: data type of matrix C
+                    (CUBLAS_DATA_FLOAT, CUBLAS_DATA_DOUBLE,
+                     CUBLAS_DATA_HALF, CUBLAS_DATA_INT8).
 
         Returns:
             None.
