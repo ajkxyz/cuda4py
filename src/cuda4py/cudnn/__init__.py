@@ -34,7 +34,7 @@ Original author: Alexey Kazantsev <a.kazantsev@samsung.com>
 """
 
 """
-Init module for CUDNN cffi bindings and helper classes.
+Init module for cuDNN cffi bindings and helper classes.
 """
 
 from cuda4py.cudnn._cudnn import (

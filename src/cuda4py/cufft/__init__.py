@@ -34,37 +34,30 @@ Original author: Alexey Kazantsev <a.kazantsev@samsung.com>
 """
 
 """
-Setup script.
+Init module for cuFFT cffi bindings and helper classes.
 """
-try:
-    from setuptools import setup
-except ImportError:
-    from distutils.core import setup
 
+from cuda4py.cufft._cufft import (CUFFT,
+                                  initialize,
 
-setup(
-    name="cuda4py",
-    description="CUDA cffi bindings and helper classes",
-    version="1.3.0",
-    license="Simplified BSD",
-    author="Samsung Electronics Co.,Ltd.",
-    author_email="a.kazantsev@samsung.com",
-    url="https://github.com/ajkxyz/cuda4py",
-    download_url="https://github.com/ajkxyz/cuda4py",
-    packages=["cuda4py", "cuda4py.blas", "cuda4py.cudnn", "cuda4py.cufft"],
-    install_requires=["cffi"],
-    package_dir={"cuda4py": "src/cuda4py"},
-    keywords=["CUDA", "CUBLAS", "CUDNN", "CUFFT", "cuda4py"],
-    classifiers=[
-        "Development Status :: 4 - Beta",
-        "Environment :: Console",
-        "Intended Audience :: Developers",
-        "License :: OSI Approved :: BSD License",
-        "Operating System :: POSIX",
-        "Programming Language :: Python :: 2.7",
-        "Programming Language :: Python :: 3.2",
-        "Programming Language :: Python :: 3.3",
-        "Programming Language :: Python :: 3.4",
-        "Topic :: Software Development :: Libraries"
-    ]
-)
+                                  CUFFT_R2C,
+                                  CUFFT_C2R,
+                                  CUFFT_C2C,
+                                  CUFFT_D2Z,
+                                  CUFFT_Z2D,
+                                  CUFFT_Z2Z,
+
+                                  CUFFT_SUCCESS,
+                                  CUFFT_INVALID_PLAN,
+                                  CUFFT_ALLOC_FAILED,
+                                  CUFFT_INVALID_TYPE,
+                                  CUFFT_INVALID_VALUE,
+                                  CUFFT_INTERNAL_ERROR,
+                                  CUFFT_EXEC_FAILED,
+                                  CUFFT_SETUP_FAILED,
+                                  CUFFT_INVALID_SIZE,
+                                  CUFFT_UNALIGNED_DATA,
+                                  CUFFT_INCOMPLETE_PARAMETER_LIST,
+                                  CUFFT_INVALID_DEVICE,
+                                  CUFFT_PARSE_ERROR,
+                                  CUFFT_NO_WORKSPACE)

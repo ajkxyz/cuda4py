@@ -34,7 +34,7 @@ Original author: Alexey Kazantsev <a.kazantsev@samsung.com>
 """
 
 """
-Tests some of the api in cuda4py.cudnn._cudnn module.
+Tests some of the api in cuda4py.cudnn package.
 """
 import cuda4py as cu
 import cuda4py.cudnn as cudnn
