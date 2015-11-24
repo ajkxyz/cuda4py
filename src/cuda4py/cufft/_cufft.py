@@ -224,6 +224,53 @@ class CUFFT(object):
             raise CU.error("cufftSetAutoAllocation", err)
         self._auto_allocation = alloc
 
+    def make_plan_many(self, xyz, batch, fft_type,
+                       inembed=None, istride=0, idist=0,
+                       onembed=None, ostride=0, odist=0):
+        """Makes 1, 2 or 3 dimensional FFT plan.
+
+        Parameters:
+            xyz: tuple of dimensions.
+            batch: number of FFTs to make.
+            fft_type: type of FFT (CUFFT_R2C, CUFFT_C2R etc.).
+            inembed: tuple with storage dimensions of the input data in memory
+                     (can be None).
+            istride: distance between two successive input elements
+                     in the least significant (i.e., innermost) dimension.
+            idist: distance between the first element of two consecutive
+                   signals in a batch of the input data.
+            onembed: tuple with storage dimensions of the output data in memory
+                     (can be None).
+            ostride: distance between two successive output elements
+                     in the least significant (i.e., innermost) dimension.
+            odist: distance between the first element of two consecutive
+                   signals in a batch of the output data.
+
+        Returns:
+            Required work size.
+        """
+        rank = len(xyz)
+        n = ffi.new("int[]", rank)
+        n[0:rank] = xyz
+        if inembed is None:
+            _inembed = ffi.NULL
+        else:
+            _inembed = ffi.new("int[]", rank)
+            _inembed[0:rank] = inembed
+        if onembed is None:
+            _onembed = ffi.NULL
+        else:
+            _onembed = ffi.new("int[]", rank)
+            _onembed[0:rank] = onembed
+        sz = ffi.new("size_t *")
+        err = lib.cufftMakePlanMany(self.handle, rank, n,
+                                    _inembed, istride, idist,
+                                    _onembed, ostride, odist,
+                                    fft_type, batch, sz)
+        if err:
+            raise CU.error("cufftMakePlanMany", err)
+        return int(sz[0])
+
     def _release(self):
         if self._lib is not None and self.handle is not None:
             self._lib.cufftDestroy(self.handle)

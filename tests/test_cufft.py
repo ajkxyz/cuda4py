@@ -106,6 +106,12 @@ class Test(unittest.TestCase):
         self.fft.auto_allocation = True
         self.assertTrue(self.fft.auto_allocation)
 
+    def test_make_plan_many(self):
+        self.fft.auto_allocation = False
+        sz = self.fft.make_plan_many((256, 128), 8, cufft.CUFFT_R2C)
+        logging.debug("make_plan_many for 256x128 x8 is %d", sz)
+        # TODO(a.kazantsev): extend this test.
+
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
