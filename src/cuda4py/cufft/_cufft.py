@@ -189,6 +189,7 @@ class CUFFT(object):
             raise CU.error("cufftCreate", err)
         self._lib = lib  # to hold the reference
         self._handle = int(handle[0])
+        self._auto_allocation = True
 
     def __int__(self):
         return self.handle
@@ -210,6 +211,18 @@ class CUFFT(object):
         if err:
             raise CU.error("cufftGetVersion", err)
         return int(version[0])
+
+    @property
+    def auto_allocation(self):
+        return self._auto_allocation
+
+    @auto_allocation.setter
+    def auto_allocation(self, value):
+        alloc = bool(value)
+        err = lib.cufftSetAutoAllocation(self.handle, alloc)
+        if err:
+            raise CU.error("cufftSetAutoAllocation", err)
+        self._auto_allocation = alloc
 
     def _release(self):
         if self._lib is not None and self.handle is not None:

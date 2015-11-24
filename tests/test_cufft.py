@@ -99,6 +99,13 @@ class Test(unittest.TestCase):
         logging.debug("cuFFT version is %d", ver)
         self.assertTrue(ver == int(ver))
 
+    def test_auto_allocation(self):
+        self.assertTrue(self.fft.auto_allocation)
+        self.fft.auto_allocation = False
+        self.assertFalse(self.fft.auto_allocation)
+        self.fft.auto_allocation = True
+        self.assertTrue(self.fft.auto_allocation)
+
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
