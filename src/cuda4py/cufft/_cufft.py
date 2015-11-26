@@ -190,6 +190,7 @@ class CUFFT(object):
         self._lib = lib  # to hold the reference
         self._handle = int(handle[0])
         self._auto_allocation = True
+        self._workarea = None
 
     def __int__(self):
         return self.handle
@@ -225,8 +226,8 @@ class CUFFT(object):
         self._auto_allocation = alloc
 
     def make_plan_many(self, xyz, batch, fft_type,
-                       inembed=None, istride=0, idist=0,
-                       onembed=None, ostride=0, odist=0):
+                       inembed=None, istride=1, idist=0,
+                       onembed=None, ostride=1, odist=0):
         """Makes 1, 2 or 3 dimensional FFT plan.
 
         Parameters:
@@ -262,7 +263,7 @@ class CUFFT(object):
         else:
             _onembed = ffi.new("int[]", rank)
             _onembed[0:rank] = onembed
-        sz = ffi.new("size_t *")
+        sz = ffi.new("size_t[]", 4)
         err = lib.cufftMakePlanMany(self.handle, rank, n,
                                     _inembed, istride, idist,
                                     _onembed, ostride, odist,
@@ -270,6 +271,63 @@ class CUFFT(object):
         if err:
             raise CU.error("cufftMakePlanMany", err)
         return int(sz[0])
+
+    @property
+    def size(self):
+        """Returns actual size of the work area required to support the plan.
+        """
+        sz = ffi.new("size_t[]", 4)
+        err = lib.cufftGetSize(self.handle, sz)
+        if err:
+            raise CU.error("cufftGetSize", err)
+        return int(sz[0])
+
+    @property
+    def workarea(self):
+        """Returns previously set workarea.
+        """
+        return self._workarea
+
+    @workarea.setter
+    def workarea(self, value):
+        """Sets workarea for plan execution.
+        """
+        err = lib.cufftSetWorkArea(self.handle, value)
+        if err:
+            raise CU.error("cufftSetWorkArea", err)
+        self._workarea = value
+
+    def exec_r2c(self, idata, odata):
+        """Executes a single-precision real-to-complex,
+        implicitly forward, cuFFT transform plan.
+        """
+        err = lib.cufftExecR2C(self.handle, idata, odata)
+        if err:
+            raise CU.error("cufftExecR2C", err)
+
+    def exec_d2z(self, idata, odata):
+        """Executes a double-precision real-to-complex,
+        implicitly forward, cuFFT transform plan.
+        """
+        err = lib.cufftExecD2Z(self.handle, idata, odata)
+        if err:
+            raise CU.error("cufftExecD2Z", err)
+
+    def exec_c2r(self, idata, odata):
+        """Executes a single-precision complex-to-real,
+        implicitly inverse, cuFFT transform plan.
+        """
+        err = lib.cufftExecC2R(self.handle, idata, odata)
+        if err:
+            raise CU.error("cufftExecC2R", err)
+
+    def exec_z2d(self, idata, odata):
+        """Executes a double-precision complex-to-real,
+        implicitly inverse, cuFFT transform plan.
+        """
+        err = lib.cufftExecZ2D(self.handle, idata, odata)
+        if err:
+            raise CU.error("cufftExecZ2D", err)
 
     def _release(self):
         if self._lib is not None and self.handle is not None:

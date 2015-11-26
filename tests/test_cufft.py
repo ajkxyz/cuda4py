@@ -52,7 +52,6 @@ class Test(unittest.TestCase):
         if self.old_env is None:
             os.environ["CUDA_DEVICE"] = "0"
         self.ctx = cu.Devices().create_some_context()
-        self.fft = cufft.CUFFT(self.ctx)
         self.path = os.path.dirname(__file__)
         if not len(self.path):
             self.path = "."
@@ -63,7 +62,6 @@ class Test(unittest.TestCase):
         else:
             os.environ["CUDA_DEVICE"] = self.old_env
         del self.old_env
-        del self.fft
         del self.ctx
         gc.collect()
 
@@ -95,22 +93,103 @@ class Test(unittest.TestCase):
         self.assertGreater(idx, 0)
 
     def test_version(self):
-        ver = self.fft.version
+        fft = cufft.CUFFT(self.ctx)
+        ver = fft.version
         logging.debug("cuFFT version is %d", ver)
         self.assertTrue(ver == int(ver))
 
     def test_auto_allocation(self):
-        self.assertTrue(self.fft.auto_allocation)
-        self.fft.auto_allocation = False
-        self.assertFalse(self.fft.auto_allocation)
-        self.fft.auto_allocation = True
-        self.assertTrue(self.fft.auto_allocation)
+        fft = cufft.CUFFT(self.ctx)
+        self.assertTrue(fft.auto_allocation)
+        fft.auto_allocation = False
+        self.assertFalse(fft.auto_allocation)
+        fft.auto_allocation = True
+        self.assertTrue(fft.auto_allocation)
 
     def test_make_plan_many(self):
-        self.fft.auto_allocation = False
-        sz = self.fft.make_plan_many((256, 128), 8, cufft.CUFFT_R2C)
-        logging.debug("make_plan_many for 256x128 x8 is %d", sz)
-        # TODO(a.kazantsev): extend this test.
+        fft = cufft.CUFFT(self.ctx)
+        fft.auto_allocation = False
+        sz = fft.make_plan_many((256, 128), 8, cufft.CUFFT_C2C)
+        logging.debug(
+            "make_plan_many (default layout) for 256x128 x8 returned %d", sz)
+        logging.debug("size is %d", fft.size)
+
+        fft = cufft.CUFFT(self.ctx)
+        fft.auto_allocation = False
+        sz = fft.make_plan_many((256, 128), 8, cufft.CUFFT_C2C,
+                                (256, 128), 1, 256 * 128,
+                                (256, 128), 1, 256 * 128)
+        logging.debug(
+            "make_plan_many (tight layout) for 256x128 x8 returned is %d", sz)
+        logging.debug("size is %d", fft.size)
+
+    def _test_exec(self, dtype):
+        x = numpy.zeros([32, 64], dtype=dtype)
+        x[:] = numpy.random.rand(x.size).reshape(x.shape) - 0.5
+        y = numpy.ones((x.shape[0], x.shape[1] // 2 + 1),
+                       dtype={numpy.float32: numpy.complex64,
+                              numpy.float64: numpy.complex128}[dtype])
+        x_gold = x.copy()
+        try:
+            y_gold = numpy.fft.rfft2(x)
+        except TypeError:
+            y_gold = None  # for pypy
+        xbuf = cu.MemAlloc(self.ctx, x)
+        ybuf = cu.MemAlloc(self.ctx, y)
+
+        # Forward transform
+        fft = cufft.CUFFT(self.ctx)
+        fft.auto_allocation = False
+        sh_x = tuple(x.shape)
+        sh_y = tuple(y.shape)
+        sz = fft.make_plan_many(sh_x, 1,
+                                {numpy.float32: cufft.CUFFT_R2C,
+                                 numpy.float64: cufft.CUFFT_D2Z}[dtype])
+        tmp = cu.MemAlloc(self.ctx, sz)
+        fft.workarea = tmp
+        self.assertEqual(fft.workarea, tmp)
+
+        {numpy.float32: fft.exec_r2c,
+         numpy.float64: fft.exec_d2z}[dtype](xbuf, ybuf)
+        ybuf.to_host(y)
+
+        if y_gold is not None:
+            delta = y - y_gold
+            max_diff = numpy.fabs(numpy.sqrt(delta.real * delta.real +
+                                             delta.imag * delta.imag)).max()
+            logging.debug("Forward max_diff is %.6e", max_diff)
+            self.assertLess(max_diff, {numpy.float32: 1.0e-3,
+                                       numpy.float64: 1.0e-6}[dtype])
+
+        # Inverse transform
+        fft = cufft.CUFFT(self.ctx)
+        fft.auto_allocation = False
+        sz = fft.make_plan_many(sh_x, 1,
+                                {numpy.float32: cufft.CUFFT_C2R,
+                                 numpy.float64: cufft.CUFFT_Z2D}[dtype])
+        fft.workarea = cu.MemAlloc(self.ctx, sz)
+
+        y /= x.size  # correct scale before inverting
+        ybuf.to_device_async(y)
+        xbuf.memset32_async(0)  # reset the resulting vector
+        {numpy.float32: fft.exec_c2r,
+         numpy.float64: fft.exec_z2d}[dtype](ybuf, xbuf)
+        xbuf.to_host(x)
+
+        max_diff = numpy.fabs(x - x_gold).max()
+        logging.debug("Inverse max_diff is %.6e", max_diff)
+        self.assertLess(max_diff, {numpy.float32: 1.0e-3,
+                                   numpy.float64: 1.0e-6}[dtype])
+
+    def test_exec_float(self):
+        logging.debug("ENTER: test_exec_float")
+        self._test_exec(numpy.float32)
+        logging.debug("EXIT: test_exec_float")
+
+    def test_exec_double(self):
+        logging.debug("ENTER: test_exec_double")
+        self._test_exec(numpy.float64)
+        logging.debug("EXIT: test_exec_double")
 
 
 if __name__ == "__main__":
