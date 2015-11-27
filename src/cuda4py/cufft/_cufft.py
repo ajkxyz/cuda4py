@@ -93,6 +93,11 @@ CUFFT_Z2D = 0x6c  # Double-Complex to Double
 CUFFT_Z2Z = 0x69  # Double-Complex to Double-Complex
 
 
+#: FFT direction
+CUFFT_FORWARD = -1
+CUFFT_INVERSE = 1
+
+
 def _initialize(backends):
     global lib
     if lib is not None:
@@ -131,6 +136,11 @@ def _initialize(backends):
     cufftResult cufftExecZ2D(cufftHandle plan,
                              size_t idata,
                              size_t odata);
+
+    cufftResult cufftExecC2C(cufftHandle plan, size_t idata,
+                             size_t odata, int direction);
+    cufftResult cufftExecZ2Z(cufftHandle plan, size_t idata,
+                             size_t odata, int direction);
 
     cufftResult cufftSetStream(cufftHandle plan, size_t stream);
     cufftResult cufftGetVersion(int *version);
@@ -328,6 +338,22 @@ class CUFFT(object):
         err = lib.cufftExecZ2D(self.handle, idata, odata)
         if err:
             raise CU.error("cufftExecZ2D", err)
+
+    def exec_c2c(self, idata, odata, direction):
+        """Executes a single-precision complex-to-complex
+        cuFFT transform plan.
+        """
+        err = lib.cufftExecC2C(self.handle, idata, odata, direction)
+        if err:
+            raise CU.error("cufftExecC2C", err)
+
+    def exec_z2z(self, idata, odata, direction):
+        """Executes a double-precision complex-to-complex
+        cuFFT transform plan.
+        """
+        err = lib.cufftExecZ2Z(self.handle, idata, odata, direction)
+        if err:
+            raise CU.error("cufftExecZ2Z", err)
 
     def _release(self):
         if self._lib is not None and self.handle is not None:

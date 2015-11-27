@@ -88,6 +88,9 @@ class Test(unittest.TestCase):
         self.assertEqual(cufft.CUFFT_Z2D, 0x6c)
         self.assertEqual(cufft.CUFFT_Z2Z, 0x69)
 
+        self.assertEqual(cufft.CUFFT_FORWARD, -1)
+        self.assertEqual(cufft.CUFFT_INVERSE, 1)
+
     def test_errors(self):
         idx = cu.CU.ERRORS[cufft.CUFFT_INVALID_PLAN].find(" | ")
         self.assertGreater(idx, 0)
@@ -190,6 +193,68 @@ class Test(unittest.TestCase):
         logging.debug("ENTER: test_exec_double")
         self._test_exec(numpy.float64)
         logging.debug("EXIT: test_exec_double")
+
+    def _test_exec_complex(self, dtype):
+        x = numpy.zeros([32, 64], dtype=dtype)
+        x.real = numpy.random.rand(x.size).reshape(x.shape) - 0.5
+        x.imag = numpy.random.rand(x.size).reshape(x.shape) - 0.5
+        y = numpy.ones_like(x)
+        x_gold = x.copy()
+        try:
+            y_gold = numpy.fft.fft2(x)
+        except TypeError:
+            y_gold = None  # for pypy
+        xbuf = cu.MemAlloc(self.ctx, x)
+        ybuf = cu.MemAlloc(self.ctx, y)
+
+        # Forward transform
+        fft = cufft.CUFFT(self.ctx)
+        fft.auto_allocation = False
+        sz = fft.make_plan_many(x.shape, 1,
+                                {numpy.complex64: cufft.CUFFT_C2C,
+                                 numpy.complex128: cufft.CUFFT_Z2Z}[dtype])
+        tmp = cu.MemAlloc(self.ctx, sz)
+        fft.workarea = tmp
+        self.assertEqual(fft.workarea, tmp)
+
+        {numpy.complex64: fft.exec_c2c,
+         numpy.complex128: fft.exec_z2z}[dtype](xbuf, ybuf,
+                                                cufft.CUFFT_FORWARD)
+        ybuf.to_host(y)
+
+        if y_gold is not None:
+            delta = y - y_gold
+            max_diff = numpy.fabs(numpy.sqrt(delta.real * delta.real +
+                                             delta.imag * delta.imag)).max()
+            logging.debug("Forward max_diff is %.6e", max_diff)
+            self.assertLess(max_diff, {numpy.complex64: 1.0e-3,
+                                       numpy.complex128: 1.0e-6}[dtype])
+
+        # Inverse transform
+        y /= x.size  # correct scale before inverting
+        ybuf.to_device_async(y)
+        xbuf.memset32_async(0)  # reset the resulting vector
+        {numpy.complex64: fft.exec_c2c,
+         numpy.complex128: fft.exec_z2z}[dtype](ybuf, xbuf,
+                                                cufft.CUFFT_INVERSE)
+        xbuf.to_host(x)
+
+        delta = x - x_gold
+        max_diff = numpy.fabs(numpy.sqrt(delta.real * delta.real +
+                                         delta.imag * delta.imag)).max()
+        logging.debug("Inverse max_diff is %.6e", max_diff)
+        self.assertLess(max_diff, {numpy.complex64: 1.0e-3,
+                                   numpy.complex128: 1.0e-6}[dtype])
+
+    def test_exec_complex_float(self):
+        logging.debug("ENTER: test_exec_complex_float")
+        self._test_exec_complex(numpy.complex64)
+        logging.debug("EXIT: test_exec_complex_float")
+
+    def test_exec_complex_double(self):
+        logging.debug("ENTER: test_exec_complex_double")
+        self._test_exec_complex(numpy.complex128)
+        logging.debug("EXIT: test_exec_complex_double")
 
 
 if __name__ == "__main__":

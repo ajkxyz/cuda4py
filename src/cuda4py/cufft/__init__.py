@@ -47,6 +47,9 @@ from cuda4py.cufft._cufft import (CUFFT,
                                   CUFFT_Z2D,
                                   CUFFT_Z2Z,
 
+                                  CUFFT_FORWARD,
+                                  CUFFT_INVERSE,
+
                                   CUFFT_SUCCESS,
                                   CUFFT_INVALID_PLAN,
                                   CUFFT_ALLOC_FAILED,
