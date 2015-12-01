@@ -116,6 +116,7 @@ class Test(unittest.TestCase):
         logging.debug(
             "make_plan_many (default layout) for 256x128 x8 returned %d", sz)
         logging.debug("size is %d", fft.size)
+        self.assertEqual(fft.execute, fft.exec_c2c)
 
         fft = cufft.CUFFT(self.ctx)
         fft.auto_allocation = False
@@ -143,17 +144,17 @@ class Test(unittest.TestCase):
         # Forward transform
         fft = cufft.CUFFT(self.ctx)
         fft.auto_allocation = False
-        sh_x = tuple(x.shape)
-        sh_y = tuple(y.shape)
-        sz = fft.make_plan_many(sh_x, 1,
+        sz = fft.make_plan_many(x.shape, 1,
                                 {numpy.float32: cufft.CUFFT_R2C,
                                  numpy.float64: cufft.CUFFT_D2Z}[dtype])
         tmp = cu.MemAlloc(self.ctx, sz)
         fft.workarea = tmp
         self.assertEqual(fft.workarea, tmp)
 
-        {numpy.float32: fft.exec_r2c,
-         numpy.float64: fft.exec_d2z}[dtype](xbuf, ybuf)
+        self.assertEqual(fft.execute,
+                         {numpy.float32: fft.exec_r2c,
+                          numpy.float64: fft.exec_d2z}[dtype])
+        fft.execute(xbuf, ybuf)
         ybuf.to_host(y)
 
         if y_gold is not None:
@@ -167,7 +168,7 @@ class Test(unittest.TestCase):
         # Inverse transform
         fft = cufft.CUFFT(self.ctx)
         fft.auto_allocation = False
-        sz = fft.make_plan_many(sh_x, 1,
+        sz = fft.make_plan_many(x.shape, 1,
                                 {numpy.float32: cufft.CUFFT_C2R,
                                  numpy.float64: cufft.CUFFT_Z2D}[dtype])
         fft.workarea = cu.MemAlloc(self.ctx, sz)
@@ -175,8 +176,10 @@ class Test(unittest.TestCase):
         y /= x.size  # correct scale before inverting
         ybuf.to_device_async(y)
         xbuf.memset32_async(0)  # reset the resulting vector
-        {numpy.float32: fft.exec_c2r,
-         numpy.float64: fft.exec_z2d}[dtype](ybuf, xbuf)
+        self.assertEqual(fft.execute,
+                         {numpy.float32: fft.exec_c2r,
+                          numpy.float64: fft.exec_z2d}[dtype])
+        fft.execute(ybuf, xbuf)
         xbuf.to_host(x)
 
         max_diff = numpy.fabs(x - x_gold).max()
@@ -217,9 +220,9 @@ class Test(unittest.TestCase):
         fft.workarea = tmp
         self.assertEqual(fft.workarea, tmp)
 
-        {numpy.complex64: fft.exec_c2c,
-         numpy.complex128: fft.exec_z2z}[dtype](xbuf, ybuf,
-                                                cufft.CUFFT_FORWARD)
+        self.assertEqual(fft.execute, {numpy.complex64: fft.exec_c2c,
+                                       numpy.complex128: fft.exec_z2z}[dtype])
+        fft.execute(xbuf, ybuf, cufft.CUFFT_FORWARD)
         ybuf.to_host(y)
 
         if y_gold is not None:
@@ -234,9 +237,7 @@ class Test(unittest.TestCase):
         y /= x.size  # correct scale before inverting
         ybuf.to_device_async(y)
         xbuf.memset32_async(0)  # reset the resulting vector
-        {numpy.complex64: fft.exec_c2c,
-         numpy.complex128: fft.exec_z2z}[dtype](ybuf, xbuf,
-                                                cufft.CUFFT_INVERSE)
+        fft.execute(ybuf, xbuf, cufft.CUFFT_INVERSE)
         xbuf.to_host(x)
 
         delta = x - x_gold
