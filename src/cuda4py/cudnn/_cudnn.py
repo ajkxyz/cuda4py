@@ -126,6 +126,8 @@ def _initialize(backends):
     typedef int cudnnConvolutionFwdPreference_t;
     typedef int cudnnConvolutionFwdAlgo_t;
 
+    size_t cudnnGetVersion();
+
     cudnnStatus_t cudnnCreate(cudnnHandle_t *handle);
     cudnnStatus_t cudnnDestroy(cudnnHandle_t handle);
 
@@ -220,6 +222,17 @@ def _initialize(backends):
         const cudnnTensorDescriptor_t destDesc,
         intptr_t destData);
 
+    cudnnStatus_t cudnnTransformTensor(
+        cudnnHandle_t handle,
+        const intptr_t alpha,
+        const cudnnTensorDescriptor_t srcDesc,
+        const intptr_t srcData,
+        const intptr_t beta,
+        const cudnnTensorDescriptor_t destDesc,
+        intptr_t destData);
+    """
+
+    src2 = """
     cudnnStatus_t cudnnConvolutionBackwardFilter(
         cudnnHandle_t handle,
         const intptr_t alpha,
@@ -243,15 +256,32 @@ def _initialize(backends):
         const intptr_t beta,
         const cudnnTensorDescriptor_t gradDesc,
         intptr_t gradData);
+    """
 
-    cudnnStatus_t cudnnTransformTensor(
+    src4 = """
+    cudnnStatus_t cudnnConvolutionBackwardFilter_v2(
         cudnnHandle_t handle,
         const intptr_t alpha,
         const cudnnTensorDescriptor_t srcDesc,
         const intptr_t srcData,
+        const cudnnTensorDescriptor_t diffDesc,
+        const intptr_t diffData,
+        const cudnnConvolutionDescriptor_t convDesc,
         const intptr_t beta,
-        const cudnnTensorDescriptor_t destDesc,
-        intptr_t destData);
+        const cudnnFilterDescriptor_t gradDesc,
+        intptr_t gradData);
+
+    cudnnStatus_t cudnnConvolutionBackwardData_v2(
+        cudnnHandle_t handle,
+        const intptr_t alpha,
+        const cudnnFilterDescriptor_t filterDesc,
+        const intptr_t filterData,
+        const cudnnTensorDescriptor_t diffDesc,
+        const intptr_t diffData,
+        const cudnnConvolutionDescriptor_t convDesc,
+        const intptr_t beta,
+        const cudnnTensorDescriptor_t gradDesc,
+        intptr_t gradData);
     """
 
     # Parse
@@ -269,6 +299,11 @@ def _initialize(backends):
     else:
         ffi = None
         raise OSError("Could not load cudnn library")
+
+    if lib.cudnnGetVersion() < 4000:
+        ffi.cdef(src2)  # specific functions for V2
+    else:
+        ffi.cdef(src4)  # specific functions for V4
 
     global ERRORS
     for code, msg in ERRORS.items():
@@ -424,6 +459,7 @@ class CUDNN(object):
         self._lib = None
         context._add_ref(self)
         initialize()
+        self.version = int(lib.cudnnGetVersion())
         handle = ffi.new("cudnnHandle_t *")
         with context:
             err = lib.cudnnCreate(handle)
@@ -520,7 +556,7 @@ class CUDNN(object):
 
     def convolution_backward_filter(
             self, alpha, src_desc, src_data, diff_desc, diff_data, conv_desc,
-            beta, grad_desc, grad_data):
+            beta, grad_desc, grad_data, algo=None):
         """Computes gradient for the convolutional kernels.
 
         Parameters:
@@ -530,16 +566,24 @@ class CUDNN(object):
             diff_data: error for backpropagation.
             grad_data: gradient for convolutional kernels.
         """
-        err = self._lib.cudnnConvolutionBackwardFilter(
-            self.handle, CU.extract_ptr(alpha), src_desc, src_data,
-            diff_desc, diff_data, conv_desc,
-            CU.extract_ptr(beta), grad_desc, grad_data)
+        if self.version < 4000:
+            err = self._lib.cudnnConvolutionBackwardFilter(
+                self.handle, CU.extract_ptr(alpha), src_desc, src_data,
+                diff_desc, diff_data, conv_desc,
+                CU.extract_ptr(beta), grad_desc, grad_data)
+        elif algo is None:
+            err = self._lib.cudnnConvolutionBackwardFilter_v2(
+                self.handle, CU.extract_ptr(alpha), src_desc, src_data,
+                diff_desc, diff_data, conv_desc,
+                CU.extract_ptr(beta), grad_desc, grad_data)
+        else:
+            raise NotImplementedError()
         if err:
             raise CU.error("cudnnConvolutionBackwardFilter", err)
 
     def convolution_backward_data(
             self, alpha, filter_desc, filter_data, diff_desc, diff_data,
-            conv_desc, beta, grad_desc, grad_data):
+            conv_desc, beta, grad_desc, grad_data, algo=None):
         """Computes backpropagated error.
 
         Parameters:
@@ -549,10 +593,18 @@ class CUDNN(object):
             diff_data: error for backpropagation.
             grad_data: backpropagated error.
         """
-        err = self._lib.cudnnConvolutionBackwardData(
-            self.handle, CU.extract_ptr(alpha), filter_desc, filter_data,
-            diff_desc, diff_data, conv_desc,
-            CU.extract_ptr(beta), grad_desc, grad_data)
+        if self.version < 4000:
+            err = self._lib.cudnnConvolutionBackwardData(
+                self.handle, CU.extract_ptr(alpha), filter_desc, filter_data,
+                diff_desc, diff_data, conv_desc,
+                CU.extract_ptr(beta), grad_desc, grad_data)
+        elif algo is None:
+            err = self._lib.cudnnConvolutionBackwardData_v2(
+                self.handle, CU.extract_ptr(alpha), filter_desc, filter_data,
+                diff_desc, diff_data, conv_desc,
+                CU.extract_ptr(beta), grad_desc, grad_data)
+        else:
+            raise NotImplementedError()
         if err:
             raise CU.error("cudnnConvolutionBackwardData", err)
 

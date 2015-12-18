@@ -104,6 +104,10 @@ class Test(unittest.TestCase):
         idx = cu.CU.ERRORS[cudnn.CUDNN_STATUS_NOT_INITIALIZED].find(" | ")
         self.assertGreater(idx, 0)
 
+    def test_version(self):
+        logging.debug("CUDNN version is %d", self.cudnn.version)
+        self.assertEqual(self.cudnn.version, int(self.cudnn.version))
+
     def test_tensor_descriptor(self):
         d = cudnn.TensorDescriptor()
         self.assertIsNotNone(d.handle)
