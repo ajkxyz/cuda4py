@@ -321,6 +321,26 @@ class Test(unittest.TestCase):
         gd_buf.to_host(gd_data)
         self.assertEqual(numpy.count_nonzero(gd_data), gd_data.size)
 
+        if self.cudnn.version >= 4000:
+            algo = self.cudnn.get_convolution_backward_filter_algorithm(
+                inp_desc, bperr_desc, conv_desc, gd_desc)
+            logging.debug("Fastest algo is %d", algo)
+            sz = self.cudnn.get_convolution_backward_filter_workspace_size(
+                inp_desc, bperr_desc, conv_desc, gd_desc, algo)
+            logging.debug("Workspace size for it is %d", sz)
+            algo = self.cudnn.get_convolution_backward_filter_algorithm(
+                inp_desc, bperr_desc, conv_desc, gd_desc,
+                cudnn.CUDNN_CONVOLUTION_BWD_FILTER_SPECIFY_WORKSPACE_LIMIT,
+                2 * 1024 * 1024 * 1024)
+            logging.debug("With 2Gb limit: %d", algo)
+            workspace = cu.MemAlloc(self.ctx, 2 * 1024 * 1024 * 1024)
+            gd_buf.memset32_async()
+            self.cudnn.convolution_backward_filter(
+                alpha, inp_desc, inp_buf, bperr_desc, bperr_buf, conv_desc,
+                beta, gd_desc, gd_buf, algo, workspace, workspace.size)
+            gd_buf.to_host(gd_data)
+            self.assertEqual(numpy.count_nonzero(gd_data), gd_data.size)
+
         logging.debug("EXIT: test_convolution_backward_filter")
 
     def test_convolution_backward_data(self):

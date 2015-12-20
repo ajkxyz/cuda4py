@@ -588,7 +588,7 @@ class CUDNN(object):
             conv_desc, input_desc, filter_desc, n, c, h, w)
         if err:
             raise CU.error("cudnnGetConvolution2dForwardOutputDim", err)
-        return n[0], c[0], h[0], w[0]
+        return int(n[0]), int(c[0]), int(h[0]), int(w[0])
 
     def get_convolution_forward_algorithm(
             self, src_desc, filter_desc, conv_dec, dest_desc,
@@ -601,7 +601,7 @@ class CUDNN(object):
             preference, memory_limit, algo)
         if err:
             raise CU.error("cudnnGetConvolutionForwardAlgorithm", err)
-        return algo[0]
+        return int(algo[0])
 
     def get_convolution_forward_workspace_size(
             self, src_desc, filter_desc, conv_dec, dest_desc, algo):
@@ -652,9 +652,50 @@ class CUDNN(object):
         if err:
             raise CU.error("cudnnConvolutionBackwardBias", err)
 
+    def get_convolution_backward_filter_algorithm(
+            self, src_desc, diff_desc, conv_dec, grad_desc,
+            preference=CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST,
+            memory_limit=0):
+        """Returns backward filter algorithm based on parameters.
+
+        Parameters:
+            src_desc: descriptor of input from the forward pass.
+            diff_desc: descriptor of the error for backpropagation.
+            conv_desc: descriptor of the convolution (padding, stride, etc.).
+            grad_desc: descriptor of the gradient for convolutional kernels.
+        """
+        algo = ffi.new("cudnnConvolutionBwdFilterAlgo_t *")
+        err = self._lib.cudnnGetConvolutionBackwardFilterAlgorithm(
+            self.handle, src_desc, diff_desc, conv_dec, grad_desc,
+            preference, memory_limit, algo)
+        if err:
+            raise CU.error("cudnnGetConvolutionBackwardFilterAlgorithm", err)
+        return int(algo[0])
+
+    def get_convolution_backward_filter_workspace_size(
+            self, src_desc, diff_desc, conv_desc, grad_desc, algo):
+        """Returns required size of the additional temporary buffer
+        for the specified backward filter convolution algorithm.
+
+        Parameters:
+            src_desc: descriptor of input from the forward pass.
+            diff_desc: descriptor of the error for backpropagation.
+            conv_desc: descriptor of the convolution (padding, stride, etc.).
+            grad_desc: descriptor of the gradient for convolutional kernels.
+            algo: algorithm for the computing of kernel's gradient.
+        """
+        size = ffi.new("size_t *")
+        err = self._lib.cudnnGetConvolutionBackwardFilterWorkspaceSize(
+            self.handle, src_desc, diff_desc, conv_desc, grad_desc, algo, size)
+        if err:
+            raise CU.error("cudnnGetConvolutionBackwardFilterWorkspaceSize",
+                           err)
+        return int(size[0])
+
     def convolution_backward_filter(
             self, alpha, src_desc, src_data, diff_desc, diff_data, conv_desc,
-            beta, grad_desc, grad_data, algo=None):
+            beta, grad_desc, grad_data,
+            algo=None, workspace=None, workspace_size=0):
         """Computes gradient for the convolutional kernels.
 
         Parameters:
@@ -675,13 +716,18 @@ class CUDNN(object):
                 diff_desc, diff_data, conv_desc,
                 CU.extract_ptr(beta), grad_desc, grad_data)
         else:
-            raise NotImplementedError()
+            err = self._lib.cudnnConvolutionBackwardFilter(
+                self.handle, CU.extract_ptr(alpha), src_desc, src_data,
+                diff_desc, diff_data, conv_desc,
+                algo, workspace, workspace_size,
+                CU.extract_ptr(beta), grad_desc, grad_data)
         if err:
             raise CU.error("cudnnConvolutionBackwardFilter", err)
 
     def convolution_backward_data(
             self, alpha, filter_desc, filter_data, diff_desc, diff_data,
-            conv_desc, beta, grad_desc, grad_data, algo=None):
+            conv_desc, beta, grad_desc, grad_data,
+            algo=None, workspace=None, workspace_size=0):
         """Computes backpropagated error.
 
         Parameters:
