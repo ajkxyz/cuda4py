@@ -37,14 +37,8 @@ PYTHONPATH=src nosetests3 -w tests
 
 for PyPy:
 ```bash
-PYTHONPATH=src pypy tests/test_api.py
-PYTHONPATH=src pypy tests/test_cublas.py
-PYTHONPATH=src pypy tests/test_cudnn.py
-PYTHONPATH=src pypy tests/test_cufft.py
+PYTHONPATH=src pypy -m nose -w tests
 ```
-
-Currently, PyPy numpy support may be incomplete,
-so tests which use numpy arrays may fail.
 
 Example usage:
 
@@ -72,11 +66,9 @@ if __name__ == "__main__":
     b = numpy.arange(1000000, dtype=numpy.float32)
     c = numpy.empty(1000000, dtype=numpy.float32)
     k = numpy.array([0.5], dtype=numpy.float32)
-    a_buf = cu.MemAlloc(ctx, a.nbytes)
-    b_buf = cu.MemAlloc(ctx, b.nbytes)
-    c_buf = cu.MemAlloc(ctx, c.nbytes)
-    a_buf.to_device_async(a)
-    b_buf.to_device_async(b)
+    a_buf = cu.MemAlloc(ctx, a)
+    b_buf = cu.MemAlloc(ctx, b)
+    c_buf = cu.MemAlloc(ctx, c)
     test.set_args(a_buf, b_buf, c_buf, k)
     test((a.size, 1, 1))
     c_buf.to_host(c)
