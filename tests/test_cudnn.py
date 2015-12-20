@@ -82,6 +82,7 @@ class Test(unittest.TestCase):
 
         self.assertEqual(cudnn.CUDNN_DATA_FLOAT, 0)
         self.assertEqual(cudnn.CUDNN_DATA_DOUBLE, 1)
+        self.assertEqual(cudnn.CUDNN_DATA_HALF, 2)
 
         self.assertEqual(cudnn.CUDNN_TENSOR_NCHW, 0)
         self.assertEqual(cudnn.CUDNN_TENSOR_NHWC, 1)
@@ -99,6 +100,28 @@ class Test(unittest.TestCase):
             cudnn.CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_PRECOMP_GEMM, 1)
         self.assertEqual(cudnn.CUDNN_CONVOLUTION_FWD_ALGO_GEMM, 2)
         self.assertEqual(cudnn.CUDNN_CONVOLUTION_FWD_ALGO_DIRECT, 3)
+        self.assertEqual(cudnn.CUDNN_CONVOLUTION_FWD_ALGO_FFT, 4)
+        self.assertEqual(cudnn.CUDNN_CONVOLUTION_FWD_ALGO_FFT_TILING, 5)
+
+        self.assertEqual(cudnn.CUDNN_CONVOLUTION_BWD_FILTER_NO_WORKSPACE, 0)
+        self.assertEqual(cudnn.CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST, 1)
+        self.assertEqual(
+            cudnn.CUDNN_CONVOLUTION_BWD_FILTER_SPECIFY_WORKSPACE_LIMIT, 2)
+
+        self.assertEqual(cudnn.CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0, 0)
+        self.assertEqual(cudnn.CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1, 1)
+        self.assertEqual(cudnn.CUDNN_CONVOLUTION_BWD_FILTER_ALGO_FFT, 2)
+        self.assertEqual(cudnn.CUDNN_CONVOLUTION_BWD_FILTER_ALGO_3, 3)
+
+        self.assertEqual(cudnn.CUDNN_CONVOLUTION_BWD_DATA_NO_WORKSPACE, 0)
+        self.assertEqual(cudnn.CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 1)
+        self.assertEqual(
+            cudnn.CUDNN_CONVOLUTION_BWD_DATA_SPECIFY_WORKSPACE_LIMIT, 2)
+
+        self.assertEqual(cudnn.CUDNN_CONVOLUTION_BWD_DATA_ALGO_0, 0)
+        self.assertEqual(cudnn.CUDNN_CONVOLUTION_BWD_DATA_ALGO_1, 1)
+        self.assertEqual(cudnn.CUDNN_CONVOLUTION_BWD_DATA_ALGO_FFT, 2)
+        self.assertEqual(cudnn.CUDNN_CONVOLUTION_BWD_DATA_ALGO_FFT_TILING, 3)
 
     def test_errors(self):
         idx = cu.CU.ERRORS[cudnn.CUDNN_STATUS_NOT_INITIALIZED].find(" | ")
