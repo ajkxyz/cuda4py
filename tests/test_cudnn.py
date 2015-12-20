@@ -377,6 +377,27 @@ class Test(unittest.TestCase):
         inp_buf.to_host(inp_data)
         self.assertEqual(numpy.count_nonzero(inp_data), inp_data.size)
 
+        if self.cudnn.version >= 4000:
+            algo = self.cudnn.get_convolution_backward_data_algorithm(
+                filter_desc, bperr_desc, conv_desc, inp_desc)
+            logging.debug("Fastest algo is %d", algo)
+            sz = self.cudnn.get_convolution_backward_data_workspace_size(
+                filter_desc, bperr_desc, conv_desc, inp_desc, algo)
+            logging.debug("Workspace size for it is %d", sz)
+            algo = self.cudnn.get_convolution_backward_data_algorithm(
+                filter_desc, bperr_desc, conv_desc, inp_desc,
+                cudnn.CUDNN_CONVOLUTION_BWD_DATA_SPECIFY_WORKSPACE_LIMIT,
+                2 * 1024 * 1024 * 1024)
+            logging.debug("With 2Gb limit: %d", algo)
+            workspace = cu.MemAlloc(self.ctx, 2 * 1024 * 1024 * 1024)
+            inp_buf.memset32_async()
+            self.cudnn.convolution_backward_data(
+                alpha, filter_desc, filter_buf, bperr_desc, bperr_buf,
+                conv_desc, beta, inp_desc, inp_buf,
+                algo, workspace, workspace.size)
+            inp_buf.to_host(inp_data)
+            self.assertEqual(numpy.count_nonzero(inp_data), inp_data.size)
+
         logging.debug("EXIT: test_convolution_backward_data")
 
     def test_transform_tensor(self):

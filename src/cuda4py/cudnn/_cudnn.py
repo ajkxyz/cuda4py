@@ -724,6 +724,49 @@ class CUDNN(object):
         if err:
             raise CU.error("cudnnConvolutionBackwardFilter", err)
 
+    def get_convolution_backward_data_algorithm(
+            self, filter_desc, diff_desc, conv_desc, grad_desc,
+            preference=CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST,
+            memory_limit=0):
+        """Returns backward data algorithm based on parameters.
+
+        Parameters:
+            filter_desc: descriptor of the convolutional kernels.
+            diff_desc: descriptor of the error for backpropagation.
+            conv_desc: descriptor of the convolution (padding, stride, etc.).
+            grad_desc: descriptor of the backpropagated gradient
+                       (same as for input vector during forward pass).
+        """
+        algo = ffi.new("cudnnConvolutionBwdDataAlgo_t *")
+        err = self._lib.cudnnGetConvolutionBackwardDataAlgorithm(
+            self.handle, filter_desc, diff_desc, conv_desc, grad_desc,
+            preference, memory_limit, algo)
+        if err:
+            raise CU.error("cudnnGetConvolutionBackwardDataAlgorithm", err)
+        return int(algo[0])
+
+    def get_convolution_backward_data_workspace_size(
+            self, filter_desc, diff_desc, conv_desc, grad_desc, algo):
+        """Returns required size of the additional temporary buffer
+        for the specified backward data convolution algorithm.
+
+        Parameters:
+            filter_desc: descriptor of the convolutional kernels.
+            diff_desc: descriptor of the error for backpropagation.
+            conv_desc: descriptor of the convolution (padding, stride, etc.).
+            grad_desc: descriptor of the backpropagated gradient
+                       (same as for input vector during forward pass).
+            algo: algorithm for the computing of backpropagated gradient.
+        """
+        size = ffi.new("size_t *")
+        err = self._lib.cudnnGetConvolutionBackwardDataWorkspaceSize(
+            self.handle, filter_desc, diff_desc, conv_desc, grad_desc, algo,
+            size)
+        if err:
+            raise CU.error("cudnnGetConvolutionBackwardDataWorkspaceSize",
+                           err)
+        return int(size[0])
+
     def convolution_backward_data(
             self, alpha, filter_desc, filter_data, diff_desc, diff_data,
             conv_desc, beta, grad_desc, grad_data,
@@ -748,7 +791,11 @@ class CUDNN(object):
                 diff_desc, diff_data, conv_desc,
                 CU.extract_ptr(beta), grad_desc, grad_data)
         else:
-            raise NotImplementedError()
+            err = self._lib.cudnnConvolutionBackwardData(
+                self.handle, CU.extract_ptr(alpha), filter_desc, filter_data,
+                diff_desc, diff_data, conv_desc,
+                algo, workspace, workspace_size,
+                CU.extract_ptr(beta), grad_desc, grad_data)
         if err:
             raise CU.error("cudnnConvolutionBackwardData", err)
 
