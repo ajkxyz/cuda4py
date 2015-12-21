@@ -123,6 +123,10 @@ class Test(unittest.TestCase):
         self.assertEqual(cudnn.CUDNN_CONVOLUTION_BWD_DATA_ALGO_FFT, 2)
         self.assertEqual(cudnn.CUDNN_CONVOLUTION_BWD_DATA_ALGO_FFT_TILING, 3)
 
+        self.assertEqual(cudnn.CUDNN_POOLING_MAX, 0)
+        self.assertEqual(cudnn.CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING, 1)
+        self.assertEqual(cudnn.CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING, 2)
+
     def test_errors(self):
         idx = cu.CU.ERRORS[cudnn.CUDNN_STATUS_NOT_INITIALIZED].find(" | ")
         self.assertGreater(idx, 0)
@@ -184,12 +188,12 @@ class Test(unittest.TestCase):
         algo = self.cudnn.get_convolution_forward_algorithm(
             inp, filter, conv, out)
         self.assertGreaterEqual(algo, 0)
-        logging.debug("Fastest algo: %d", algo)
+        logging.debug("Fastest algo is %d", algo)
         algo = self.cudnn.get_convolution_forward_algorithm(
             inp, filter, conv, out,
             cudnn.CUDNN_CONVOLUTION_FWD_SPECIFY_WORKSPACE_LIMIT,
-            2 * 1024 * 1024 * 1024)
-        logging.debug("With 2Gb limit algo: %d", algo)
+            512 * 1024 * 1024)
+        logging.debug("With 512 Mb limit: %d", algo)
         logging.debug("EXIT: test_get_convolutional_forward_algorithm")
 
     def test_get_convolution_forward_workspace_size(self):
@@ -331,9 +335,9 @@ class Test(unittest.TestCase):
             algo = self.cudnn.get_convolution_backward_filter_algorithm(
                 inp_desc, bperr_desc, conv_desc, gd_desc,
                 cudnn.CUDNN_CONVOLUTION_BWD_FILTER_SPECIFY_WORKSPACE_LIMIT,
-                2 * 1024 * 1024 * 1024)
-            logging.debug("With 2Gb limit: %d", algo)
-            workspace = cu.MemAlloc(self.ctx, 2 * 1024 * 1024 * 1024)
+                512 * 1024 * 1024)
+            logging.debug("With 512 Mb limit: %d", algo)
+            workspace = cu.MemAlloc(self.ctx, 512 * 1024 * 1024)
             gd_buf.memset32_async()
             self.cudnn.convolution_backward_filter(
                 alpha, inp_desc, inp_buf, bperr_desc, bperr_buf, conv_desc,
@@ -387,9 +391,9 @@ class Test(unittest.TestCase):
             algo = self.cudnn.get_convolution_backward_data_algorithm(
                 filter_desc, bperr_desc, conv_desc, inp_desc,
                 cudnn.CUDNN_CONVOLUTION_BWD_DATA_SPECIFY_WORKSPACE_LIMIT,
-                2 * 1024 * 1024 * 1024)
-            logging.debug("With 2Gb limit: %d", algo)
-            workspace = cu.MemAlloc(self.ctx, 2 * 1024 * 1024 * 1024)
+                512 * 1024 * 1024)
+            logging.debug("With 512 Mb limit: %d", algo)
+            workspace = cu.MemAlloc(self.ctx, 512 * 1024 * 1024)
             inp_buf.memset32_async()
             self.cudnn.convolution_backward_data(
                 alpha, filter_desc, filter_buf, bperr_desc, bperr_buf,
@@ -429,6 +433,56 @@ class Test(unittest.TestCase):
         self.assertEqual(max_diff, 0.0)
 
         logging.debug("EXIT: test_transform_tensor")
+
+    def test_pooling(self):
+        logging.debug("ENTER: test_pooling")
+
+        input_data = numpy.zeros((5, 96, 64, 48), dtype=numpy.float32)
+        input_data[:] = numpy.random.rand(input_data.size).reshape(
+            input_data.shape) - 0.5
+        input_desc = cudnn.TensorDescriptor()
+        input_desc.set_4d(cudnn.CUDNN_TENSOR_NCHW, cudnn.CUDNN_DATA_FLOAT,
+                          *input_data.shape)
+        input_buf = cu.MemAlloc(self.ctx, input_data)
+
+        pooling_desc = cudnn.PoolingDescriptor()
+        pooling_desc.set_2d((5, 3), (2, 1), (3, 2))
+
+        output_shape = cudnn.CUDNN.get_pooling_2d_forward_output_dim(
+            pooling_desc, input_desc)
+        self.assertEqual(len(output_shape), 4)
+        logging.debug("Output shape is %s", output_shape)
+
+        output_data = numpy.zeros(output_shape, dtype=numpy.float32)
+        output_data[:] = numpy.nan
+        output_desc = cudnn.TensorDescriptor()
+        output_desc.set_4d(cudnn.CUDNN_TENSOR_NCHW, cudnn.CUDNN_DATA_FLOAT,
+                           *output_data.shape)
+        output_buf = cu.MemAlloc(self.ctx, output_data)
+
+        np_one = numpy.ones(1, dtype=numpy.float32)
+        np_zero = numpy.zeros(1, dtype=numpy.float32)
+        self.cudnn.pooling_forward(
+            pooling_desc, np_one, input_desc, input_buf,
+            np_zero, output_desc, output_buf)
+        output_buf.to_host(output_data)
+        self.assertEqual(numpy.count_nonzero(numpy.isnan(output_data)), 0)
+
+        diff_desc = output_desc
+        diff_buf = cu.MemAlloc(self.ctx, output_data)
+        grad_desc = input_desc
+        grad_data = input_data.copy()
+        grad_data[:] = numpy.nan
+        grad_buf = cu.MemAlloc(self.ctx, grad_data)
+
+        self.cudnn.pooling_backward(
+            pooling_desc, np_one, output_desc, output_buf,
+            diff_desc, diff_buf, input_desc, input_buf, np_zero,
+            grad_desc, grad_buf)
+        grad_buf.to_host(grad_data)
+        self.assertEqual(numpy.count_nonzero(numpy.isnan(grad_data)), 0)
+
+        logging.debug("EXIT: test_pooling")
 
 
 if __name__ == "__main__":

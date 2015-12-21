@@ -42,6 +42,7 @@ from cuda4py.cudnn._cudnn import (
     TensorDescriptor,
     FilterDescriptor,
     ConvolutionDescriptor,
+    PoolingDescriptor,
     initialize,
 
     CUDNN_STATUS_SUCCESS,
@@ -93,4 +94,8 @@ from cuda4py.cudnn._cudnn import (
     CUDNN_CONVOLUTION_BWD_DATA_ALGO_0,
     CUDNN_CONVOLUTION_BWD_DATA_ALGO_1,
     CUDNN_CONVOLUTION_BWD_DATA_ALGO_FFT,
-    CUDNN_CONVOLUTION_BWD_DATA_ALGO_FFT_TILING)
+    CUDNN_CONVOLUTION_BWD_DATA_ALGO_FFT_TILING,
+
+    CUDNN_POOLING_MAX,
+    CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING,
+    CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING)

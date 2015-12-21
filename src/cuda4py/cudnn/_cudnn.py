@@ -135,6 +135,12 @@ CUDNN_CONVOLUTION_BWD_DATA_ALGO_FFT = 2
 CUDNN_CONVOLUTION_BWD_DATA_ALGO_FFT_TILING = 3
 
 
+#: cudnnPoolingMode_t
+CUDNN_POOLING_MAX = 0
+CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING = 1
+CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING = 2
+
+
 def _initialize(backends):
     global lib
     if lib is not None:
@@ -149,11 +155,13 @@ def _initialize(backends):
     typedef size_t cudnnTensorDescriptor_t;
     typedef size_t cudnnConvolutionDescriptor_t;
     typedef size_t cudnnFilterDescriptor_t;
+    typedef size_t cudnnPoolingDescriptor_t;
     typedef int cudnnTensorFormat_t;
     typedef int cudnnDataType_t;
     typedef int cudnnConvolutionMode_t;
     typedef int cudnnConvolutionFwdPreference_t;
     typedef int cudnnConvolutionFwdAlgo_t;
+    typedef int cudnnPoolingMode_t;
 
     size_t cudnnGetVersion();
 
@@ -259,6 +267,46 @@ def _initialize(backends):
         const intptr_t beta,
         const cudnnTensorDescriptor_t destDesc,
         intptr_t destData);
+
+    cudnnStatus_t cudnnCreatePoolingDescriptor(
+        cudnnPoolingDescriptor_t *poolingDesc);
+    cudnnStatus_t cudnnDestroyPoolingDescriptor(
+        cudnnPoolingDescriptor_t poolingDesc);
+    cudnnStatus_t cudnnSetPooling2dDescriptor(
+        cudnnPoolingDescriptor_t poolingDesc,
+        cudnnPoolingMode_t mode,
+        int windowHeight,
+        int windowWidth,
+        int verticalPadding,
+        int horizontalPadding,
+        int verticalStride,
+        int horizontalStride);
+    cudnnStatus_t cudnnGetPooling2dForwardOutputDim(
+        const cudnnPoolingDescriptor_t poolingDesc,
+        const cudnnTensorDescriptor_t inputTensorDesc,
+        int *n, int *c, int *h, int *w);
+    cudnnStatus_t cudnnPoolingForward(
+        cudnnHandle_t handle,
+        const cudnnPoolingDescriptor_t poolingDesc,
+        const intptr_t alpha,
+        const cudnnTensorDescriptor_t xDesc,
+        const intptr_t x,
+        const intptr_t beta,
+        const cudnnTensorDescriptor_t yDesc,
+        intptr_t y);
+    cudnnStatus_t cudnnPoolingBackward(
+        cudnnHandle_t handle,
+        const cudnnPoolingDescriptor_t poolingDesc,
+        const intptr_t alpha,
+        const cudnnTensorDescriptor_t yDesc,
+        const intptr_t y,
+        const cudnnTensorDescriptor_t dyDesc,
+        const intptr_t dy,
+        const cudnnTensorDescriptor_t xDesc,
+        const intptr_t x,
+        const intptr_t beta,
+        const cudnnTensorDescriptor_t dxDesc,
+        intptr_t dx);
     """
 
     src2 = """
@@ -549,6 +597,35 @@ class ConvolutionDescriptor(Descriptor):
             raise CU.error("cudnnSetConvolution2dDescriptor", err)
 
 
+class PoolingDescriptor(Descriptor):
+    """CUDNN pooling descriptor.
+    """
+    def _create(self):
+        handle = ffi.new("cudnnPoolingDescriptor_t *")
+        err = lib.cudnnCreatePoolingDescriptor(handle)
+        if err:
+            raise CU.error("cudnnCreatePoolingDescriptor", err)
+        self._handle = int(handle[0])
+
+    def _destroy(self):
+        self._lib.cudnnDestroyPoolingDescriptor(self.handle)
+
+    def set_2d(self, window_hw, padding_vh, stride_vh, mode=CUDNN_POOLING_MAX):
+        """Initializes tensor descriptor into a 4D tensor.
+
+        Parameters:
+            window_hw: tuple of ints for pooling window (height, width).
+            padding_vh: tuple for padding (vertical, horizontal).
+            stride_vh: tuple for stride (vertical, horizontal).
+            mode: pooling mode.
+        """
+        err = self._lib.cudnnSetPooling2dDescriptor(
+            self.handle, mode, window_hw[0], window_hw[1],
+            padding_vh[0], padding_vh[1], stride_vh[0], stride_vh[1])
+        if err:
+            raise CU.error("cudnnSetPooling2dDescriptor", err)
+
+
 class CUDNN(object):
     """CUDNN functions can be invoked from this class.
     """
@@ -588,6 +665,17 @@ class CUDNN(object):
             conv_desc, input_desc, filter_desc, n, c, h, w)
         if err:
             raise CU.error("cudnnGetConvolution2dForwardOutputDim", err)
+        return int(n[0]), int(c[0]), int(h[0]), int(w[0])
+
+    @staticmethod
+    def get_pooling_2d_forward_output_dim(pooling_desc, input_desc):
+        """Returns tuple of n, c, h, w for an output.
+        """
+        n, c, h, w = (ffi.new("int *") for _ in range(4))
+        err = lib.cudnnGetPooling2dForwardOutputDim(
+            pooling_desc, input_desc, n, c, h, w)
+        if err:
+            raise CU.error("cudnnGetPooling2dForwardOutputDim", err)
         return int(n[0]), int(c[0]), int(h[0]), int(w[0])
 
     def get_convolution_forward_algorithm(
@@ -798,6 +886,42 @@ class CUDNN(object):
                 CU.extract_ptr(beta), grad_desc, grad_data)
         if err:
             raise CU.error("cudnnConvolutionBackwardData", err)
+
+    def pooling_forward(self, pooling_desc, alpha, src_desc, src_data,
+                        beta, dest_desc, dest_data):
+        """Does pooling forward propagation.
+
+        Parameters:
+            alpha: src_data multiplier (numpy array with one element).
+            beta: dest_data multiplier (numpy array with one element).
+        """
+        err = self._lib.cudnnPoolingForward(
+            self.handle, pooling_desc, CU.extract_ptr(alpha),
+            src_desc, src_data,
+            CU.extract_ptr(beta), dest_desc, dest_data)
+        if err:
+            raise CU.error("cudnnPoolingForward", err)
+
+    def pooling_backward(self, pooling_desc, alpha, output_desc, output_data,
+                         diff_desc, diff_data, input_desc, input_data,
+                         beta, grad_desc, grad_data):
+        """Does pooling backward propagation.
+
+        Parameters:
+            alpha: diff_data multiplier (numpy array with one element).
+            beta: grad_data multiplier (numpy array with one element).
+            output: output of the forward propagation.
+            diff: error for backpropagation.
+            input: input of the forward propagation.
+            grad: backpropagated error.
+        """
+        err = self._lib.cudnnPoolingBackward(
+            self.handle, pooling_desc, CU.extract_ptr(alpha),
+            output_desc, output_data,
+            diff_desc, diff_data, input_desc, input_data,
+            CU.extract_ptr(beta), grad_desc, grad_data)
+        if err:
+            raise CU.error("cudnnPoolingBackward", err)
 
     def transform_tensor(self, alpha, src_desc, src_data,
                          beta, dest_desc, dest_data):
