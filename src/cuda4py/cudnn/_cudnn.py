@@ -141,6 +141,15 @@ CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING = 1
 CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING = 2
 
 
+#: cudnnNanPropagation_t
+CUDNN_NOT_PROPAGATE_NAN = 0
+CUDNN_PROPAGATE_NAN = 1
+
+
+#: Cached cudnn version
+_cudnn_version = 0
+
+
 def _initialize(backends):
     global lib
     if lib is not None:
@@ -185,13 +194,6 @@ def _initialize(backends):
         cudnnFilterDescriptor_t *filterDesc);
     cudnnStatus_t cudnnDestroyFilterDescriptor(
         cudnnFilterDescriptor_t filterDesc);
-    cudnnStatus_t cudnnSetFilter4dDescriptor(
-        cudnnFilterDescriptor_t filterDesc,
-        cudnnDataType_t dataType,
-        int k,
-        int c,
-        int h,
-        int w);
 
     cudnnStatus_t cudnnCreateConvolutionDescriptor(
         cudnnConvolutionDescriptor_t *convDesc);
@@ -272,15 +274,6 @@ def _initialize(backends):
         cudnnPoolingDescriptor_t *poolingDesc);
     cudnnStatus_t cudnnDestroyPoolingDescriptor(
         cudnnPoolingDescriptor_t poolingDesc);
-    cudnnStatus_t cudnnSetPooling2dDescriptor(
-        cudnnPoolingDescriptor_t poolingDesc,
-        cudnnPoolingMode_t mode,
-        int windowHeight,
-        int windowWidth,
-        int verticalPadding,
-        int horizontalPadding,
-        int verticalStride,
-        int horizontalStride);
     cudnnStatus_t cudnnGetPooling2dForwardOutputDim(
         const cudnnPoolingDescriptor_t poolingDesc,
         const cudnnTensorDescriptor_t inputTensorDesc,
@@ -335,7 +328,7 @@ def _initialize(backends):
         intptr_t gradData);
     """
 
-    src4 = """
+    src4p = """
     typedef int cudnnConvolutionBwdFilterAlgo_t;
     typedef int cudnnConvolutionBwdDataAlgo_t;
     typedef int cudnnConvolutionBwdFilterPreference_t;
@@ -404,30 +397,50 @@ def _initialize(backends):
         const intptr_t beta,
         const cudnnTensorDescriptor_t gradDesc,
         intptr_t gradData);
+    """
 
-    cudnnStatus_t cudnnConvolutionBackwardFilter_v2(
-        cudnnHandle_t handle,
-        const intptr_t alpha,
-        const cudnnTensorDescriptor_t srcDesc,
-        const intptr_t srcData,
-        const cudnnTensorDescriptor_t diffDesc,
-        const intptr_t diffData,
-        const cudnnConvolutionDescriptor_t convDesc,
-        const intptr_t beta,
-        const cudnnFilterDescriptor_t gradDesc,
-        intptr_t gradData);
+    src24 = """
+    cudnnStatus_t cudnnSetFilter4dDescriptor(
+        cudnnFilterDescriptor_t filterDesc,
+        cudnnDataType_t dataType,
+        int k,
+        int c,
+        int h,
+        int w);
 
-    cudnnStatus_t cudnnConvolutionBackwardData_v2(
-        cudnnHandle_t handle,
-        const intptr_t alpha,
-        const cudnnFilterDescriptor_t filterDesc,
-        const intptr_t filterData,
-        const cudnnTensorDescriptor_t diffDesc,
-        const intptr_t diffData,
-        const cudnnConvolutionDescriptor_t convDesc,
-        const intptr_t beta,
-        const cudnnTensorDescriptor_t gradDesc,
-        intptr_t gradData);
+    cudnnStatus_t cudnnSetPooling2dDescriptor(
+        cudnnPoolingDescriptor_t poolingDesc,
+        cudnnPoolingMode_t mode,
+        int windowHeight,
+        int windowWidth,
+        int verticalPadding,
+        int horizontalPadding,
+        int verticalStride,
+        int horizontalStride);
+    """
+
+    src5 = """
+    typedef int cudnnNanPropagation_t;
+
+    cudnnStatus_t cudnnSetFilter4dDescriptor(
+        cudnnFilterDescriptor_t filterDesc,
+        cudnnDataType_t dataType,
+        cudnnTensorFormat_t format,
+        int k,
+        int c,
+        int h,
+        int w);
+
+    cudnnStatus_t cudnnSetPooling2dDescriptor(
+        cudnnPoolingDescriptor_t poolingDesc,
+        cudnnPoolingMode_t mode,
+        cudnnNanPropagation_t maxpoolingNanOpt,
+        int windowHeight,
+        int windowWidth,
+        int verticalPadding,
+        int horizontalPadding,
+        int verticalStride,
+        int horizontalStride);
     """
 
     # Parse
@@ -446,10 +459,17 @@ def _initialize(backends):
         ffi = None
         raise OSError("Could not load cudnn library")
 
-    if lib.cudnnGetVersion() < 4000:
+    global _cudnn_version
+    _cudnn_version = lib.cudnnGetVersion()
+    if _cudnn_version < 4000:
         ffi.cdef(src2)  # specific functions for V2
+        ffi.cdef(src24)  # specific functions for V2 and V4
     else:
-        ffi.cdef(src4)  # specific functions for V4
+        ffi.cdef(src4p)  # specific functions for V4+
+        if _cudnn_version < 5000:
+            ffi.cdef(src24)  # specific functions for V2 and V4
+        else:
+            ffi.cdef(src5)  # specific functions for V5
 
     global ERRORS
     for code, msg in ERRORS.items():
@@ -549,7 +569,7 @@ class FilterDescriptor(Descriptor):
     def _destroy(self):
         self._lib.cudnnDestroyFilterDescriptor(self.handle)
 
-    def set_4d(self, data_type, k, c, h, w):
+    def set_4d(self, data_type, k, c, h, w, fmt=CUDNN_TENSOR_NCHW):
         """Initializes tensor descriptor into a 4D tensor.
 
         Parameters:
@@ -558,9 +578,14 @@ class FilterDescriptor(Descriptor):
             c: number of image channels.
             h: image height.
             w: image width.
+            fmt: tensor format for weights.
         """
-        err = self._lib.cudnnSetFilter4dDescriptor(
-            self.handle, data_type, k, c, h, w)
+        if _cudnn_version < 5000:
+            err = self._lib.cudnnSetFilter4dDescriptor(
+                self.handle, data_type, k, c, h, w)
+        else:
+            err = self._lib.cudnnSetFilter4dDescriptor(
+                self.handle, data_type, fmt, k, c, h, w)
         if err:
             raise CU.error("cudnnSetFilter4dDescriptor", err)
 
@@ -610,7 +635,8 @@ class PoolingDescriptor(Descriptor):
     def _destroy(self):
         self._lib.cudnnDestroyPoolingDescriptor(self.handle)
 
-    def set_2d(self, window_hw, padding_vh, stride_vh, mode=CUDNN_POOLING_MAX):
+    def set_2d(self, window_hw, padding_vh, stride_vh, mode=CUDNN_POOLING_MAX,
+               maxpooling_nan_opt=CUDNN_NOT_PROPAGATE_NAN):
         """Initializes tensor descriptor into a 4D tensor.
 
         Parameters:
@@ -619,9 +645,15 @@ class PoolingDescriptor(Descriptor):
             stride_vh: tuple for stride (vertical, horizontal).
             mode: pooling mode.
         """
-        err = self._lib.cudnnSetPooling2dDescriptor(
-            self.handle, mode, window_hw[0], window_hw[1],
-            padding_vh[0], padding_vh[1], stride_vh[0], stride_vh[1])
+        if _cudnn_version < 5000:
+            err = self._lib.cudnnSetPooling2dDescriptor(
+                self.handle, mode, window_hw[0], window_hw[1],
+                padding_vh[0], padding_vh[1], stride_vh[0], stride_vh[1])
+        else:
+            err = self._lib.cudnnSetPooling2dDescriptor(
+                self.handle, mode, maxpooling_nan_opt,
+                window_hw[0], window_hw[1],
+                padding_vh[0], padding_vh[1], stride_vh[0], stride_vh[1])
         if err:
             raise CU.error("cudnnSetPooling2dDescriptor", err)
 
@@ -634,7 +666,6 @@ class CUDNN(object):
         self._lib = None
         context._add_ref(self)
         initialize()
-        self.version = int(lib.cudnnGetVersion())
         handle = ffi.new("cudnnHandle_t *")
         with context:
             err = lib.cudnnCreate(handle)
@@ -643,6 +674,10 @@ class CUDNN(object):
             raise CU.error("cudnnCreate", err)
         self._lib = lib  # to hold the reference
         self._handle = int(handle[0])
+
+    @property
+    def version(self):
+        return _cudnn_version
 
     def __int__(self):
         return self.handle
@@ -798,17 +833,22 @@ class CUDNN(object):
                 self.handle, CU.extract_ptr(alpha), src_desc, src_data,
                 diff_desc, diff_data, conv_desc,
                 CU.extract_ptr(beta), grad_desc, grad_data)
-        elif algo is None:
-            err = self._lib.cudnnConvolutionBackwardFilter_v2(
-                self.handle, CU.extract_ptr(alpha), src_desc, src_data,
-                diff_desc, diff_data, conv_desc,
-                CU.extract_ptr(beta), grad_desc, grad_data)
-        else:
-            err = self._lib.cudnnConvolutionBackwardFilter(
-                self.handle, CU.extract_ptr(alpha), src_desc, src_data,
-                diff_desc, diff_data, conv_desc,
-                algo, workspace, workspace_size,
-                CU.extract_ptr(beta), grad_desc, grad_data)
+            if err:
+                raise CU.error("cudnnConvolutionBackwardFilter", err)
+            return
+        if algo is None:
+            # Get the algorithm
+            algo = self.get_convolution_backward_filter_algorithm(
+                src_desc, diff_desc, conv_desc, grad_desc,
+                CUDNN_CONVOLUTION_BWD_FILTER_SPECIFY_WORKSPACE_LIMIT
+                if workspace_size else
+                CUDNN_CONVOLUTION_BWD_FILTER_NO_WORKSPACE, workspace_size)
+        # Compute weights gradient with the selected algorithm
+        err = self._lib.cudnnConvolutionBackwardFilter(
+            self.handle, CU.extract_ptr(alpha), src_desc, src_data,
+            diff_desc, diff_data, conv_desc,
+            algo, 0 if workspace is None else workspace, workspace_size,
+            CU.extract_ptr(beta), grad_desc, grad_data)
         if err:
             raise CU.error("cudnnConvolutionBackwardFilter", err)
 
@@ -873,17 +913,22 @@ class CUDNN(object):
                 self.handle, CU.extract_ptr(alpha), filter_desc, filter_data,
                 diff_desc, diff_data, conv_desc,
                 CU.extract_ptr(beta), grad_desc, grad_data)
-        elif algo is None:
-            err = self._lib.cudnnConvolutionBackwardData_v2(
-                self.handle, CU.extract_ptr(alpha), filter_desc, filter_data,
-                diff_desc, diff_data, conv_desc,
-                CU.extract_ptr(beta), grad_desc, grad_data)
-        else:
-            err = self._lib.cudnnConvolutionBackwardData(
-                self.handle, CU.extract_ptr(alpha), filter_desc, filter_data,
-                diff_desc, diff_data, conv_desc,
-                algo, workspace, workspace_size,
-                CU.extract_ptr(beta), grad_desc, grad_data)
+            if err:
+                raise CU.error("cudnnConvolutionBackwardData", err)
+            return
+        if algo is None:
+            # Get the algorithm
+            algo = self.get_convolution_backward_data_algorithm(
+                filter_desc, diff_desc, conv_desc, grad_desc,
+                CUDNN_CONVOLUTION_BWD_DATA_SPECIFY_WORKSPACE_LIMIT
+                if workspace_size else
+                CUDNN_CONVOLUTION_BWD_DATA_NO_WORKSPACE, workspace_size)
+        # Backpropagate the error with the selected algorithm
+        err = self._lib.cudnnConvolutionBackwardData(
+            self.handle, CU.extract_ptr(alpha), filter_desc, filter_data,
+            diff_desc, diff_data, conv_desc,
+            algo, 0 if workspace is None else workspace, workspace_size,
+            CU.extract_ptr(beta), grad_desc, grad_data)
         if err:
             raise CU.error("cudnnConvolutionBackwardData", err)
 

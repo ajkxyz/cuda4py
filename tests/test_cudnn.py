@@ -448,8 +448,11 @@ class Test(unittest.TestCase):
         pooling_desc = cudnn.PoolingDescriptor()
         pooling_desc.set_2d((5, 3), (2, 1), (3, 2))
 
-        output_shape = cudnn.CUDNN.get_pooling_2d_forward_output_dim(
-            pooling_desc, input_desc)
+        if self.cudnn.version < 4000:
+            output_shape = (5, 96, 22, 24)
+        else:
+            output_shape = cudnn.CUDNN.get_pooling_2d_forward_output_dim(
+                pooling_desc, input_desc)
         self.assertEqual(len(output_shape), 4)
         logging.debug("Output shape is %s", output_shape)
 
