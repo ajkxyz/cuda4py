@@ -511,6 +511,11 @@ def _initialize(backends):
         cudnnDirectionMode_t direction,
         cudnnRNNMode_t mode,
         cudnnDataType_t dataType);
+    cudnnStatus_t cudnnGetRNNWorkspaceSize(
+        cudnnHandle_t handle,
+        const cudnnRNNDescriptor_t rnnDesc,
+        const cudnnTensorDescriptor_t *xDesc,
+        size_t *sizeInBytes);
     """
 
     # Parse

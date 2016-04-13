@@ -572,15 +572,30 @@ class Test(unittest.TestCase):
 
     def _test_rnn(self, short):
         drop = cudnn.DropoutDescriptor()
-        self.cudnn.set_dropout_descriptor(drop)
+        drop_states = cu.MemAlloc(self.ctx, self.cudnn.dropout_states_size)
+        self.cudnn.set_dropout_descriptor(
+            drop, 0.5, drop_states, drop_states.size, 1234)
 
         rnn = cudnn.RNNDescriptor()
+        n_unroll = 32
         if short:
-            rnn.set(64, 32, 3, drop)
+            rnn.set(64, n_unroll, 3, drop)
         else:
-            rnn.set(64, 32, 3, drop, input_mode=cudnn.CUDNN_LINEAR_INPUT,
+            rnn.set(64, n_unroll, 3, drop, input_mode=cudnn.CUDNN_LINEAR_INPUT,
                     direction=cudnn.CUDNN_UNIDIRECTIONAL,
                     mode=cudnn.CUDNN_LSTM, data_type=cudnn.CUDNN_DATA_FLOAT)
+
+        x = numpy.zeros((5, 1, 1, 64), dtype=numpy.float32)
+        numpy.random.seed(1234)
+        x[:] = numpy.random.rand(x.size).reshape(x.shape) - 0.5
+        x_desc = cudnn.TensorDescriptor()
+        x_desc.set_4d(cudnn.CUDNN_TENSOR_NCHW, cudnn.CUDNN_DATA_FLOAT,
+                      *x.shape)
+        x_descs = list(x_desc for _i in range(n_unroll))
+        sz = self.cudnn.get_rnn_workspace_size(rnn, x_descs)
+        self.assertIsInstance(sz, int)
+        logging.debug("RNN workspace size for %s with %d unrolls is %d",
+                      x.shape, n_unroll, sz)
 
         # TODO(a.kazantsev): add test.
 

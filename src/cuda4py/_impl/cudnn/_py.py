@@ -668,6 +668,18 @@ class CUDNN(object):
         if err:
             raise CU.error("cudnnDropoutBackward", err)
 
+    def get_rnn_workspace_size(self, rnn_desc, xdescs):
+        """
+        """
+        size = cudnnffi.ffi.new("size_t *")
+        _xdescs = cudnnffi.ffi.new("cudnnTensorDescriptor_t[]", len(xdescs))
+        _xdescs[0:len(xdescs)] = xdescs
+        err = self._lib.cudnnGetRNNWorkspaceSize(
+            self.handle, rnn_desc, _xdescs, size)
+        if err:
+            raise CU.error("cudnnGetRNNWorkspaceSize", err)
+        return int(size[0])
+
     def _release(self):
         if self._lib is not None and self.handle is not None:
             self._lib.cudnnDestroy(self.handle)
