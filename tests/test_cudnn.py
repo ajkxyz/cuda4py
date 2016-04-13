@@ -523,14 +523,18 @@ class Test(unittest.TestCase):
                       input_data.shape, drop_rss)
 
         drop = cudnn.DropoutDescriptor()
-        # TODO(a.kazantsev): add test.
-        del drop
+        self.cudnn.set_dropout_descriptor(drop)  # with default parameters
+        states = cu.MemAlloc(self.ctx, drop_ss)
+        self.cudnn.set_dropout_descriptor(drop, 0.5, states, drop_ss, 1234)
+
+        # TODO(a.kazantsev): add tests for dropout forward and backward.
 
         logging.debug("EXIT: test_dropout")
 
     def _test_rnn(self, short):
         drop = cudnn.DropoutDescriptor()
-        # TODO(a.kazantsev): initialize it.
+        self.cudnn.set_dropout_descriptor(drop)
+
         rnn = cudnn.RNNDescriptor()
         if short:
             rnn.set(64, 32, 3, drop)
@@ -538,6 +542,7 @@ class Test(unittest.TestCase):
             rnn.set(64, 32, 3, drop, input_mode=cudnn.CUDNN_LINEAR_INPUT,
                     direction=cudnn.CUDNN_UNIDIRECTIONAL,
                     mode=cudnn.CUDNN_LSTM, data_type=cudnn.CUDNN_DATA_FLOAT)
+
         # TODO(a.kazantsev): add test.
 
     def test_rnn(self):

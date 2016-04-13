@@ -612,6 +612,23 @@ class CUDNN(object):
             raise CU.error("cudnnDropoutGetStatesSize", err)
         return int(size[0])
 
+    def set_dropout_descriptor(self, dropout_desc, dropout=0.5,
+                               states=None, states_size=0, seed=0):
+        """Sets dropout value, optionally initializing the states.
+
+        Parameters:
+            dropout_desc: DropoutDescriptor instance.
+            dropout: dropout value.
+            states: random states to initialize or None.
+            states_size: size of random states in bytes.
+            seed: seed to initialize random states.
+        """
+        err = self._lib.cudnnSetDropoutDescriptor(
+            dropout_desc, self.handle, dropout,
+            0 if states is None else states, states_size, seed)
+        if err:
+            raise CU.error("cudnnSetDropoutDescriptor", err)
+
     def _release(self):
         if self._lib is not None and self.handle is not None:
             self._lib.cudnnDestroy(self.handle)
