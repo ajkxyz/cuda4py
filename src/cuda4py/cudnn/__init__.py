@@ -37,14 +37,7 @@ Original author: Alexey Kazantsev <a.kazantsev@samsung.com>
 Init module for cuDNN cffi bindings and helper classes.
 """
 
-from cuda4py.cudnn._cudnn import (
-    CUDNN,
-    TensorDescriptor,
-    FilterDescriptor,
-    ConvolutionDescriptor,
-    PoolingDescriptor,
-    DropoutDescriptor,
-    RNNDescriptor,
+from cuda4py._impl.cudnn._cffi import (
     initialize,
 
     CUDNN_STATUS_SUCCESS,
@@ -115,3 +108,12 @@ from cuda4py.cudnn._cudnn import (
 
     CUDNN_LINEAR_INPUT,
     CUDNN_SKIP_INPUT)
+
+from cuda4py._impl.cudnn._py import (
+    CUDNN,
+    TensorDescriptor,
+    FilterDescriptor,
+    ConvolutionDescriptor,
+    PoolingDescriptor,
+    DropoutDescriptor,
+    RNNDescriptor)

@@ -34,509 +34,27 @@ Original author: Alexey Kazantsev <a.kazantsev@samsung.com>
 """
 
 """
-cuDNN cffi bindings and helper classes.
+cuDNN helper classes.
 """
-import cffi
-import cuda4py._cffi as cuffi
+import cuda4py._impl.cudnn._cffi as cudnnffi
+from cuda4py._impl.cudnn._cffi import (
+    CUDNN_TENSOR_NCHW, CUDNN_CROSS_CORRELATION, CUDNN_POOLING_MAX,
+    CUDNN_NOT_PROPAGATE_NAN, CUDNN_LINEAR_INPUT, CUDNN_UNIDIRECTIONAL,
+    CUDNN_LSTM, CUDNN_DATA_FLOAT, CUDNN_CONVOLUTION_FWD_PREFER_FASTEST,
+    CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST,
+    CUDNN_CONVOLUTION_BWD_FILTER_SPECIFY_WORKSPACE_LIMIT,
+    CUDNN_CONVOLUTION_BWD_FILTER_NO_WORKSPACE,
+    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST,
+    CUDNN_CONVOLUTION_BWD_DATA_SPECIFY_WORKSPACE_LIMIT,
+    CUDNN_CONVOLUTION_BWD_DATA_NO_WORKSPACE)
 from cuda4py._py import CU
-
-
-#: ffi parser
-ffi = None
-
-
-#: Loaded shared library
-lib = None
-
-
-#: Error codes
-CUDNN_STATUS_SUCCESS = 0
-CUDNN_STATUS_NOT_INITIALIZED = 1
-CUDNN_STATUS_ALLOC_FAILED = 2
-CUDNN_STATUS_BAD_PARAM = 3
-CUDNN_STATUS_INTERNAL_ERROR = 4
-CUDNN_STATUS_INVALID_VALUE = 5
-CUDNN_STATUS_ARCH_MISMATCH = 6
-CUDNN_STATUS_MAPPING_ERROR = 7
-CUDNN_STATUS_EXECUTION_FAILED = 8
-CUDNN_STATUS_NOT_SUPPORTED = 9
-CUDNN_STATUS_LICENSE_ERROR = 10
-
-
-#: Error descriptions
-ERRORS = {
-    CUDNN_STATUS_NOT_INITIALIZED: "CUDNN_STATUS_NOT_INITIALIZED",
-    CUDNN_STATUS_ALLOC_FAILED: "CUDNN_STATUS_ALLOC_FAILED",
-    CUDNN_STATUS_BAD_PARAM: "CUDNN_STATUS_BAD_PARAM",
-    CUDNN_STATUS_INTERNAL_ERROR: "CUDNN_STATUS_INTERNAL_ERROR",
-    CUDNN_STATUS_INVALID_VALUE: "CUDNN_STATUS_INVALID_VALUE",
-    CUDNN_STATUS_ARCH_MISMATCH: "CUDNN_STATUS_ARCH_MISMATCH",
-    CUDNN_STATUS_MAPPING_ERROR: "CUDNN_STATUS_MAPPING_ERROR",
-    CUDNN_STATUS_EXECUTION_FAILED: "CUDNN_STATUS_EXECUTION_FAILED",
-    CUDNN_STATUS_NOT_SUPPORTED: "CUDNN_STATUS_NOT_SUPPORTED",
-    CUDNN_STATUS_LICENSE_ERROR: "CUDNN_STATUS_LICENSE_ERROR"
-}
-
-
-#: cudnnDataType_t
-CUDNN_DATA_FLOAT = 0
-CUDNN_DATA_DOUBLE = 1
-CUDNN_DATA_HALF = 2
-
-
-#: cudnnTensorFormat_t
-CUDNN_TENSOR_NCHW = 0
-CUDNN_TENSOR_NHWC = 1
-
-
-#: cudnnConvolutionMode_t
-CUDNN_CONVOLUTION = 0
-CUDNN_CROSS_CORRELATION = 1
-
-
-#: cudnnConvolutionFwdPreference_t
-CUDNN_CONVOLUTION_FWD_NO_WORKSPACE = 0
-CUDNN_CONVOLUTION_FWD_PREFER_FASTEST = 1
-CUDNN_CONVOLUTION_FWD_SPECIFY_WORKSPACE_LIMIT = 2
-
-
-#: cudnnConvolutionFwdAlgo_t
-CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM = 0
-CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_PRECOMP_GEMM = 1
-CUDNN_CONVOLUTION_FWD_ALGO_GEMM = 2
-CUDNN_CONVOLUTION_FWD_ALGO_DIRECT = 3
-CUDNN_CONVOLUTION_FWD_ALGO_FFT = 4
-CUDNN_CONVOLUTION_FWD_ALGO_FFT_TILING = 5
-
-
-#: cudnnConvolutionBwdFilterPreference_t
-CUDNN_CONVOLUTION_BWD_FILTER_NO_WORKSPACE = 0
-CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST = 1
-CUDNN_CONVOLUTION_BWD_FILTER_SPECIFY_WORKSPACE_LIMIT = 2
-
-
-#: cudnnConvolutionBwdFilterAlgo_t
-CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0 = 0  # non-deterministic
-CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1 = 1
-CUDNN_CONVOLUTION_BWD_FILTER_ALGO_FFT = 2
-CUDNN_CONVOLUTION_BWD_FILTER_ALGO_3 = 3  # non-deterministic with workspace
-
-
-#: cudnnConvolutionBwdDataPreference_t
-CUDNN_CONVOLUTION_BWD_DATA_NO_WORKSPACE = 0
-CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST = 1
-CUDNN_CONVOLUTION_BWD_DATA_SPECIFY_WORKSPACE_LIMIT = 2
-
-
-#: cudnnConvolutionBwdDataAlgo_t
-CUDNN_CONVOLUTION_BWD_DATA_ALGO_0 = 0  # non-deterministic
-CUDNN_CONVOLUTION_BWD_DATA_ALGO_1 = 1
-CUDNN_CONVOLUTION_BWD_DATA_ALGO_FFT = 2
-CUDNN_CONVOLUTION_BWD_DATA_ALGO_FFT_TILING = 3
-
-
-#: cudnnPoolingMode_t
-CUDNN_POOLING_MAX = 0
-CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING = 1
-CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING = 2
-
-
-#: cudnnNanPropagation_t
-CUDNN_NOT_PROPAGATE_NAN = 0
-CUDNN_PROPAGATE_NAN = 1
-
-
-#: cudnnRNNMode_t
-CUDNN_RNN_RELU = 0
-CUDNN_RNN_TANH = 1
-CUDNN_LSTM = 2
-CUDNN_GRU = 3
-
-
-#: cudnnDirectionMode_t
-CUDNN_UNIDIRECTIONAL = 0
-CUDNN_BIDIRECTIONAL = 1
-
-
-#: cudnnRNNInputMode_t
-CUDNN_LINEAR_INPUT = 0
-CUDNN_SKIP_INPUT = 1
-
-
-#: Cached cudnn version
-_cudnn_version = 0
-
-
-def _initialize(backends):
-    global lib
-    if lib is not None:
-        return
-    # C function definitions
-    # size_t instead of void* is used
-    # for convinience with python calls and numpy arrays,
-    # cffi automatically calls int() on objects also.
-    src = """
-    typedef int cudnnStatus_t;
-    typedef size_t cudnnHandle_t;
-    typedef size_t cudnnTensorDescriptor_t;
-    typedef size_t cudnnConvolutionDescriptor_t;
-    typedef size_t cudnnFilterDescriptor_t;
-    typedef size_t cudnnPoolingDescriptor_t;
-    typedef int cudnnTensorFormat_t;
-    typedef int cudnnDataType_t;
-    typedef int cudnnConvolutionMode_t;
-    typedef int cudnnConvolutionFwdPreference_t;
-    typedef int cudnnConvolutionFwdAlgo_t;
-    typedef int cudnnPoolingMode_t;
-
-    size_t cudnnGetVersion();
-
-    cudnnStatus_t cudnnCreate(cudnnHandle_t *handle);
-    cudnnStatus_t cudnnDestroy(cudnnHandle_t handle);
-
-    cudnnStatus_t cudnnCreateTensorDescriptor(
-        cudnnTensorDescriptor_t *tensorDesc);
-    cudnnStatus_t cudnnDestroyTensorDescriptor(
-        cudnnTensorDescriptor_t tensorDesc);
-    cudnnStatus_t cudnnSetTensor4dDescriptor(
-        cudnnTensorDescriptor_t tensorDesc,
-        cudnnTensorFormat_t format,
-        cudnnDataType_t dataType,
-        int n,
-        int c,
-        int h,
-        int w);
-
-    cudnnStatus_t cudnnCreateFilterDescriptor(
-        cudnnFilterDescriptor_t *filterDesc);
-    cudnnStatus_t cudnnDestroyFilterDescriptor(
-        cudnnFilterDescriptor_t filterDesc);
-
-    cudnnStatus_t cudnnCreateConvolutionDescriptor(
-        cudnnConvolutionDescriptor_t *convDesc);
-    cudnnStatus_t cudnnDestroyConvolutionDescriptor(
-        cudnnConvolutionDescriptor_t convDesc);
-    cudnnStatus_t cudnnSetConvolution2dDescriptor(
-        cudnnConvolutionDescriptor_t convDesc,
-        int pad_h,
-        int pad_w,
-        int u,
-        int v,
-        int upscalex,
-        int upscaley,
-        cudnnConvolutionMode_t mode);
-
-    cudnnStatus_t cudnnGetConvolution2dForwardOutputDim(
-        const cudnnConvolutionDescriptor_t convDesc,
-        const cudnnTensorDescriptor_t inputTensorDesc,
-        const cudnnFilterDescriptor_t filterDesc,
-        int *n,
-        int *c,
-        int *h,
-        int *w);
-
-    cudnnStatus_t cudnnGetConvolutionForwardAlgorithm(
-        cudnnHandle_t handle,
-        const cudnnTensorDescriptor_t srcDesc,
-        const cudnnFilterDescriptor_t filterDesc,
-        const cudnnConvolutionDescriptor_t convDesc,
-        const cudnnTensorDescriptor_t destDesc,
-        cudnnConvolutionFwdPreference_t preference,
-        size_t memoryLimitInbytes,
-        cudnnConvolutionFwdAlgo_t *algo);
-
-    cudnnStatus_t cudnnGetConvolutionForwardWorkspaceSize(
-        cudnnHandle_t handle,
-        const cudnnTensorDescriptor_t srcDesc,
-        const cudnnFilterDescriptor_t filterDesc,
-        const cudnnConvolutionDescriptor_t convDesc,
-        const cudnnTensorDescriptor_t destDesc,
-        cudnnConvolutionFwdAlgo_t algo,
-        size_t *sizeInBytes);
-
-    cudnnStatus_t cudnnConvolutionForward(
-        cudnnHandle_t handle,
-        const intptr_t alpha,
-        const cudnnTensorDescriptor_t srcDesc,
-        const intptr_t srcData,
-        const cudnnFilterDescriptor_t filterDesc,
-        const intptr_t filterData,
-        const cudnnConvolutionDescriptor_t convDesc,
-        cudnnConvolutionFwdAlgo_t algo,
-        intptr_t workSpace,
-        size_t workSpaceSizeInBytes,
-        const intptr_t beta,
-        const cudnnTensorDescriptor_t destDesc,
-        intptr_t destData);
-
-    cudnnStatus_t cudnnConvolutionBackwardBias(
-        cudnnHandle_t handle,
-        const intptr_t alpha,
-        const cudnnTensorDescriptor_t srcDesc,
-        const intptr_t srcData,
-        const intptr_t beta,
-        const cudnnTensorDescriptor_t destDesc,
-        intptr_t destData);
-
-    cudnnStatus_t cudnnTransformTensor(
-        cudnnHandle_t handle,
-        const intptr_t alpha,
-        const cudnnTensorDescriptor_t srcDesc,
-        const intptr_t srcData,
-        const intptr_t beta,
-        const cudnnTensorDescriptor_t destDesc,
-        intptr_t destData);
-
-    cudnnStatus_t cudnnCreatePoolingDescriptor(
-        cudnnPoolingDescriptor_t *poolingDesc);
-    cudnnStatus_t cudnnDestroyPoolingDescriptor(
-        cudnnPoolingDescriptor_t poolingDesc);
-    cudnnStatus_t cudnnGetPooling2dForwardOutputDim(
-        const cudnnPoolingDescriptor_t poolingDesc,
-        const cudnnTensorDescriptor_t inputTensorDesc,
-        int *n, int *c, int *h, int *w);
-    cudnnStatus_t cudnnPoolingForward(
-        cudnnHandle_t handle,
-        const cudnnPoolingDescriptor_t poolingDesc,
-        const intptr_t alpha,
-        const cudnnTensorDescriptor_t xDesc,
-        const intptr_t x,
-        const intptr_t beta,
-        const cudnnTensorDescriptor_t yDesc,
-        intptr_t y);
-    cudnnStatus_t cudnnPoolingBackward(
-        cudnnHandle_t handle,
-        const cudnnPoolingDescriptor_t poolingDesc,
-        const intptr_t alpha,
-        const cudnnTensorDescriptor_t yDesc,
-        const intptr_t y,
-        const cudnnTensorDescriptor_t dyDesc,
-        const intptr_t dy,
-        const cudnnTensorDescriptor_t xDesc,
-        const intptr_t x,
-        const intptr_t beta,
-        const cudnnTensorDescriptor_t dxDesc,
-        intptr_t dx);
-    """
-
-    src2 = """
-    cudnnStatus_t cudnnConvolutionBackwardFilter(
-        cudnnHandle_t handle,
-        const intptr_t alpha,
-        const cudnnTensorDescriptor_t srcDesc,
-        const intptr_t srcData,
-        const cudnnTensorDescriptor_t diffDesc,
-        const intptr_t diffData,
-        const cudnnConvolutionDescriptor_t convDesc,
-        const intptr_t beta,
-        const cudnnFilterDescriptor_t gradDesc,
-        intptr_t gradData);
-
-    cudnnStatus_t cudnnConvolutionBackwardData(
-        cudnnHandle_t handle,
-        const intptr_t alpha,
-        const cudnnFilterDescriptor_t filterDesc,
-        const intptr_t filterData,
-        const cudnnTensorDescriptor_t diffDesc,
-        const intptr_t diffData,
-        const cudnnConvolutionDescriptor_t convDesc,
-        const intptr_t beta,
-        const cudnnTensorDescriptor_t gradDesc,
-        intptr_t gradData);
-    """
-
-    src4p = """
-    typedef int cudnnConvolutionBwdFilterAlgo_t;
-    typedef int cudnnConvolutionBwdDataAlgo_t;
-    typedef int cudnnConvolutionBwdFilterPreference_t;
-    typedef int cudnnConvolutionBwdDataPreference_t;
-
-    cudnnStatus_t cudnnGetConvolutionBackwardFilterAlgorithm(
-        cudnnHandle_t handle,
-        const cudnnTensorDescriptor_t xDesc,
-        const cudnnTensorDescriptor_t dyDesc,
-        const cudnnConvolutionDescriptor_t convDesc,
-        const cudnnFilterDescriptor_t dwDesc,
-        cudnnConvolutionBwdFilterPreference_t preference,
-        size_t memoryLimitInBytes,
-        cudnnConvolutionBwdFilterAlgo_t *algo);
-    cudnnStatus_t cudnnGetConvolutionBackwardFilterWorkspaceSize(
-        cudnnHandle_t handle,
-        const cudnnTensorDescriptor_t xDesc,
-        const cudnnTensorDescriptor_t dyDesc,
-        const cudnnConvolutionDescriptor_t convDesc,
-        const cudnnFilterDescriptor_t gradDesc,
-        cudnnConvolutionBwdFilterAlgo_t algo,
-        size_t *sizeInBytes);
-    cudnnStatus_t cudnnConvolutionBackwardFilter(
-        cudnnHandle_t handle,
-        const intptr_t alpha,
-        const cudnnTensorDescriptor_t srcDesc,
-        const intptr_t srcData,
-        const cudnnTensorDescriptor_t diffDesc,
-        const intptr_t diffData,
-        const cudnnConvolutionDescriptor_t convDesc,
-        const cudnnConvolutionBwdFilterAlgo_t algo,
-        intptr_t workSpace,
-        size_t workSpaceSizeInBytes,
-        const intptr_t beta,
-        const cudnnFilterDescriptor_t gradDesc,
-        intptr_t gradData);
-
-    cudnnStatus_t cudnnGetConvolutionBackwardDataAlgorithm(
-        cudnnHandle_t handle,
-        const cudnnFilterDescriptor_t wDesc,
-        const cudnnTensorDescriptor_t dyDesc,
-        const cudnnConvolutionDescriptor_t convDesc,
-        const cudnnTensorDescriptor_t dxDesc,
-        cudnnConvolutionBwdDataPreference_t preference,
-        size_t memoryLimitInBytes,
-        cudnnConvolutionBwdDataAlgo_t *algo);
-    cudnnStatus_t cudnnGetConvolutionBackwardDataWorkspaceSize(
-        cudnnHandle_t handle,
-        const cudnnFilterDescriptor_t wDesc,
-        const cudnnTensorDescriptor_t dyDesc,
-        const cudnnConvolutionDescriptor_t convDesc,
-        const cudnnTensorDescriptor_t dxDesc,
-        cudnnConvolutionBwdDataAlgo_t algo,
-        size_t *sizeInBytes);
-    cudnnStatus_t cudnnConvolutionBackwardData(
-        cudnnHandle_t handle,
-        const intptr_t alpha,
-        const cudnnFilterDescriptor_t filterDesc,
-        const intptr_t filterData,
-        const cudnnTensorDescriptor_t diffDesc,
-        const intptr_t diffData,
-        const cudnnConvolutionDescriptor_t convDesc,
-        const cudnnConvolutionBwdDataAlgo_t algo,
-        intptr_t workSpace,
-        size_t workSpaceSizeInBytes,
-        const intptr_t beta,
-        const cudnnTensorDescriptor_t gradDesc,
-        intptr_t gradData);
-    """
-
-    src24 = """
-    cudnnStatus_t cudnnSetFilter4dDescriptor(
-        cudnnFilterDescriptor_t filterDesc,
-        cudnnDataType_t dataType,
-        int k,
-        int c,
-        int h,
-        int w);
-
-    cudnnStatus_t cudnnSetPooling2dDescriptor(
-        cudnnPoolingDescriptor_t poolingDesc,
-        cudnnPoolingMode_t mode,
-        int windowHeight,
-        int windowWidth,
-        int verticalPadding,
-        int horizontalPadding,
-        int verticalStride,
-        int horizontalStride);
-    """
-
-    src5 = """
-    typedef size_t cudnnRNNDescriptor_t;
-    typedef size_t cudnnDropoutDescriptor_t;
-    typedef int cudnnNanPropagation_t;
-    typedef int cudnnRNNInputMode_t;
-    typedef int cudnnDirectionMode_t;
-    typedef int cudnnRNNMode_t;
-
-    cudnnStatus_t cudnnSetFilter4dDescriptor(
-        cudnnFilterDescriptor_t filterDesc,
-        cudnnDataType_t dataType,
-        cudnnTensorFormat_t format,
-        int k,
-        int c,
-        int h,
-        int w);
-
-    cudnnStatus_t cudnnSetPooling2dDescriptor(
-        cudnnPoolingDescriptor_t poolingDesc,
-        cudnnPoolingMode_t mode,
-        cudnnNanPropagation_t maxpoolingNanOpt,
-        int windowHeight,
-        int windowWidth,
-        int verticalPadding,
-        int horizontalPadding,
-        int verticalStride,
-        int horizontalStride);
-
-    cudnnStatus_t cudnnCreateDropoutDescriptor(
-        cudnnDropoutDescriptor_t * dropoutDesc);
-    cudnnStatus_t cudnnDestroyDropoutDescriptor(
-        cudnnDropoutDescriptor_t dropoutDesc);
-
-    cudnnStatus_t cudnnCreateRNNDescriptor(cudnnRNNDescriptor_t *rnnDesc);
-    cudnnStatus_t cudnnDestroyRNNDescriptor(cudnnRNNDescriptor_t rnnDesc);
-    cudnnStatus_t cudnnSetRNNDescriptor(
-        cudnnRNNDescriptor_t rnnDesc,
-        int hiddenSize,
-        int seqLength,
-        int numLayers,
-        cudnnDropoutDescriptor_t dropoutDesc,
-        cudnnRNNInputMode_t inputMode,
-        cudnnDirectionMode_t direction,
-        cudnnRNNMode_t mode,
-        cudnnDataType_t dataType);
-    """
-
-    # Parse
-    global ffi
-    ffi = cffi.FFI()
-    ffi.cdef(src)
-
-    # Load library
-    for libnme in backends:
-        try:
-            lib = ffi.dlopen(libnme)
-            break
-        except OSError:
-            pass
-    else:
-        ffi = None
-        raise OSError("Could not load cudnn library")
-
-    global _cudnn_version
-    _cudnn_version = lib.cudnnGetVersion()
-    if _cudnn_version < 4000:
-        ffi.cdef(src2)  # specific functions for V2
-        ffi.cdef(src24)  # specific functions for V2 and V4
-    else:
-        ffi.cdef(src4p)  # specific functions for V4+
-        if _cudnn_version < 5000:
-            ffi.cdef(src24)  # specific functions for V2 and V4
-        else:
-            ffi.cdef(src5)  # specific functions for V5
-
-    global ERRORS
-    for code, msg in ERRORS.items():
-        if code in CU.ERRORS:
-            s = " | " + msg
-            if s not in CU.ERRORS[code]:
-                CU.ERRORS[code] += s
-        else:
-            CU.ERRORS[code] = msg
-
-
-def initialize(backends=("libcudnn.so", "cudnn64_65.dll")):
-    """Loads shared library.
-    """
-    cuffi.initialize()
-    global lib
-    if lib is not None:
-        return
-    with cuffi.lock:
-        _initialize(backends)
 
 
 class Descriptor(object):
     """CUDNN descriptor base class.
     """
     def __init__(self):
-        self._lib = lib
+        self._lib = cudnnffi.lib
         self._handle = None
         self._create()
 
@@ -570,8 +88,8 @@ class TensorDescriptor(Descriptor):
     """CUDNN tensor descriptor.
     """
     def _create(self):
-        handle = ffi.new("cudnnTensorDescriptor_t *")
-        err = lib.cudnnCreateTensorDescriptor(handle)
+        handle = cudnnffi.ffi.new("cudnnTensorDescriptor_t *")
+        err = self._lib.cudnnCreateTensorDescriptor(handle)
         if err:
             raise CU.error("cudnnCreateTensorDescriptor", err)
         self._handle = int(handle[0])
@@ -600,8 +118,8 @@ class FilterDescriptor(Descriptor):
     """CUDNN filter descriptor.
     """
     def _create(self):
-        handle = ffi.new("cudnnFilterDescriptor_t *")
-        err = lib.cudnnCreateFilterDescriptor(handle)
+        handle = cudnnffi.ffi.new("cudnnFilterDescriptor_t *")
+        err = self._lib.cudnnCreateFilterDescriptor(handle)
         if err:
             raise CU.error("cudnnCreateFilterDescriptor", err)
         self._handle = int(handle[0])
@@ -620,7 +138,7 @@ class FilterDescriptor(Descriptor):
             w: image width.
             fmt: tensor format for weights.
         """
-        if _cudnn_version < 5000:
+        if cudnnffi.cudnn_version < 5000:
             err = self._lib.cudnnSetFilter4dDescriptor(
                 self.handle, data_type, k, c, h, w)
         else:
@@ -634,8 +152,8 @@ class ConvolutionDescriptor(Descriptor):
     """CUDNN convolution descriptor.
     """
     def _create(self):
-        handle = ffi.new("cudnnConvolutionDescriptor_t *")
-        err = lib.cudnnCreateConvolutionDescriptor(handle)
+        handle = cudnnffi.ffi.new("cudnnConvolutionDescriptor_t *")
+        err = self._lib.cudnnCreateConvolutionDescriptor(handle)
         if err:
             raise CU.error("cudnnCreateConvolutionDescriptor", err)
         self._handle = int(handle[0])
@@ -666,8 +184,8 @@ class PoolingDescriptor(Descriptor):
     """CUDNN pooling descriptor.
     """
     def _create(self):
-        handle = ffi.new("cudnnPoolingDescriptor_t *")
-        err = lib.cudnnCreatePoolingDescriptor(handle)
+        handle = cudnnffi.ffi.new("cudnnPoolingDescriptor_t *")
+        err = self._lib.cudnnCreatePoolingDescriptor(handle)
         if err:
             raise CU.error("cudnnCreatePoolingDescriptor", err)
         self._handle = int(handle[0])
@@ -685,7 +203,7 @@ class PoolingDescriptor(Descriptor):
             stride_vh: tuple for stride (vertical, horizontal).
             mode: pooling mode.
         """
-        if _cudnn_version < 5000:
+        if cudnnffi.cudnn_version < 5000:
             err = self._lib.cudnnSetPooling2dDescriptor(
                 self.handle, mode, window_hw[0], window_hw[1],
                 padding_vh[0], padding_vh[1], stride_vh[0], stride_vh[1])
@@ -702,8 +220,8 @@ class DropoutDescriptor(Descriptor):
     """CUDNN dropout descriptor.
     """
     def _create(self):
-        handle = ffi.new("cudnnDropoutDescriptor_t *")
-        err = lib.cudnnCreateDropoutDescriptor(handle)
+        handle = cudnnffi.ffi.new("cudnnDropoutDescriptor_t *")
+        err = self._lib.cudnnCreateDropoutDescriptor(handle)
         if err:
             raise CU.error("cudnnCreateDropoutDescriptor", err)
         self._handle = int(handle[0])
@@ -716,8 +234,8 @@ class RNNDescriptor(Descriptor):
     """CUDNN RNN descriptor.
     """
     def _create(self):
-        handle = ffi.new("cudnnRNNDescriptor_t *")
-        err = lib.cudnnCreateRNNDescriptor(handle)
+        handle = cudnnffi.ffi.new("cudnnRNNDescriptor_t *")
+        err = self._lib.cudnnCreateRNNDescriptor(handle)
         if err:
             raise CU.error("cudnnCreateRNNDescriptor", err)
         self._handle = int(handle[0])
@@ -754,19 +272,19 @@ class CUDNN(object):
         self._context = context
         self._lib = None
         context._add_ref(self)
-        initialize()
-        handle = ffi.new("cudnnHandle_t *")
+        cudnnffi.initialize()
+        handle = cudnnffi.ffi.new("cudnnHandle_t *")
         with context:
-            err = lib.cudnnCreate(handle)
+            err = cudnnffi.lib.cudnnCreate(handle)
         if err:
             self._handle = None
             raise CU.error("cudnnCreate", err)
-        self._lib = lib  # to hold the reference
+        self._lib = cudnnffi.lib  # to hold the reference
         self._handle = int(handle[0])
 
     @property
     def version(self):
-        return _cudnn_version
+        return cudnnffi.cudnn_version
 
     def __int__(self):
         return self.handle
@@ -784,8 +302,8 @@ class CUDNN(object):
                                               filter_desc):
         """Returns tuple of n, c, h, w for an output.
         """
-        n, c, h, w = (ffi.new("int *") for _ in range(4))
-        err = lib.cudnnGetConvolution2dForwardOutputDim(
+        n, c, h, w = (cudnnffi.ffi.new("int *") for _ in range(4))
+        err = cudnnffi.lib.cudnnGetConvolution2dForwardOutputDim(
             conv_desc, input_desc, filter_desc, n, c, h, w)
         if err:
             raise CU.error("cudnnGetConvolution2dForwardOutputDim", err)
@@ -795,8 +313,8 @@ class CUDNN(object):
     def get_pooling_2d_forward_output_dim(pooling_desc, input_desc):
         """Returns tuple of n, c, h, w for an output.
         """
-        n, c, h, w = (ffi.new("int *") for _ in range(4))
-        err = lib.cudnnGetPooling2dForwardOutputDim(
+        n, c, h, w = (cudnnffi.ffi.new("int *") for _ in range(4))
+        err = cudnnffi.lib.cudnnGetPooling2dForwardOutputDim(
             pooling_desc, input_desc, n, c, h, w)
         if err:
             raise CU.error("cudnnGetPooling2dForwardOutputDim", err)
@@ -807,7 +325,7 @@ class CUDNN(object):
             preference=CUDNN_CONVOLUTION_FWD_PREFER_FASTEST, memory_limit=0):
         """Returns forward algorithm based on parameters.
         """
-        algo = ffi.new("cudnnConvolutionFwdAlgo_t *")
+        algo = cudnnffi.ffi.new("cudnnConvolutionFwdAlgo_t *")
         err = self._lib.cudnnGetConvolutionForwardAlgorithm(
             self.handle, src_desc, filter_desc, conv_dec, dest_desc,
             preference, memory_limit, algo)
@@ -820,7 +338,7 @@ class CUDNN(object):
         """Returns required size of the additional temporary buffer
         for the specified forward convolution algorithm.
         """
-        size = ffi.new("size_t *")
+        size = cudnnffi.ffi.new("size_t *")
         err = self._lib.cudnnGetConvolutionForwardWorkspaceSize(
             self.handle, src_desc, filter_desc, conv_dec, dest_desc,
             algo, size)
@@ -838,7 +356,7 @@ class CUDNN(object):
             alpha: src_data multiplier (numpy array with one element).
             beta: dest_data multiplier (numpy array with one element).
         """
-        size = ffi.new("size_t *")
+        size = cudnnffi.ffi.new("size_t *")
         err = self._lib.cudnnConvolutionForward(
             self.handle, CU.extract_ptr(alpha), src_desc, src_data,
             filter_desc, filter_data, conv_desc,
@@ -876,7 +394,7 @@ class CUDNN(object):
             conv_desc: descriptor of the convolution (padding, stride, etc.).
             grad_desc: descriptor of the gradient for convolutional kernels.
         """
-        algo = ffi.new("cudnnConvolutionBwdFilterAlgo_t *")
+        algo = cudnnffi.ffi.new("cudnnConvolutionBwdFilterAlgo_t *")
         err = self._lib.cudnnGetConvolutionBackwardFilterAlgorithm(
             self.handle, src_desc, diff_desc, conv_dec, grad_desc,
             preference, memory_limit, algo)
@@ -896,7 +414,7 @@ class CUDNN(object):
             grad_desc: descriptor of the gradient for convolutional kernels.
             algo: algorithm for the computing of kernel's gradient.
         """
-        size = ffi.new("size_t *")
+        size = cudnnffi.ffi.new("size_t *")
         err = self._lib.cudnnGetConvolutionBackwardFilterWorkspaceSize(
             self.handle, src_desc, diff_desc, conv_desc, grad_desc, algo, size)
         if err:
@@ -954,7 +472,7 @@ class CUDNN(object):
             grad_desc: descriptor of the backpropagated gradient
                        (same as for input vector during forward pass).
         """
-        algo = ffi.new("cudnnConvolutionBwdDataAlgo_t *")
+        algo = cudnnffi.ffi.new("cudnnConvolutionBwdDataAlgo_t *")
         err = self._lib.cudnnGetConvolutionBackwardDataAlgorithm(
             self.handle, filter_desc, diff_desc, conv_desc, grad_desc,
             preference, memory_limit, algo)
@@ -975,7 +493,7 @@ class CUDNN(object):
                        (same as for input vector during forward pass).
             algo: algorithm for the computing of backpropagated gradient.
         """
-        size = ffi.new("size_t *")
+        size = cudnnffi.ffi.new("size_t *")
         err = self._lib.cudnnGetConvolutionBackwardDataWorkspaceSize(
             self.handle, filter_desc, diff_desc, conv_desc, grad_desc, algo,
             size)

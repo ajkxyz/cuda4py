@@ -502,6 +502,8 @@ class Test(unittest.TestCase):
         logging.debug("EXIT: test_pooling")
 
     def test_dropout(self):
+        if self.cudnn.version < 5000:
+            return
         logging.debug("ENTER: test_dropout")
 
         drop = cudnn.DropoutDescriptor()
