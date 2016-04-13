@@ -146,6 +146,23 @@ CUDNN_NOT_PROPAGATE_NAN = 0
 CUDNN_PROPAGATE_NAN = 1
 
 
+#: cudnnRNNMode_t
+CUDNN_RNN_RELU = 0
+CUDNN_RNN_TANH = 1
+CUDNN_LSTM = 2
+CUDNN_GRU = 3
+
+
+#: cudnnDirectionMode_t
+CUDNN_UNIDIRECTIONAL = 0
+CUDNN_BIDIRECTIONAL = 1
+
+
+#: cudnnRNNInputMode_t
+CUDNN_LINEAR_INPUT = 0
+CUDNN_SKIP_INPUT = 1
+
+
 #: Cached cudnn version
 _cudnn_version = 0
 
@@ -420,7 +437,12 @@ def _initialize(backends):
     """
 
     src5 = """
+    typedef size_t cudnnRNNDescriptor_t;
+    typedef size_t cudnnDropoutDescriptor_t;
     typedef int cudnnNanPropagation_t;
+    typedef int cudnnRNNInputMode_t;
+    typedef int cudnnDirectionMode_t;
+    typedef int cudnnRNNMode_t;
 
     cudnnStatus_t cudnnSetFilter4dDescriptor(
         cudnnFilterDescriptor_t filterDesc,
@@ -441,6 +463,24 @@ def _initialize(backends):
         int horizontalPadding,
         int verticalStride,
         int horizontalStride);
+
+    cudnnStatus_t cudnnCreateDropoutDescriptor(
+        cudnnDropoutDescriptor_t * dropoutDesc);
+    cudnnStatus_t cudnnDestroyDropoutDescriptor(
+        cudnnDropoutDescriptor_t dropoutDesc);
+
+    cudnnStatus_t cudnnCreateRNNDescriptor(cudnnRNNDescriptor_t *rnnDesc);
+    cudnnStatus_t cudnnDestroyRNNDescriptor(cudnnRNNDescriptor_t rnnDesc);
+    cudnnStatus_t cudnnSetRNNDescriptor(
+        cudnnRNNDescriptor_t rnnDesc,
+        int hiddenSize,
+        int seqLength,
+        int numLayers,
+        cudnnDropoutDescriptor_t dropoutDesc,
+        cudnnRNNInputMode_t inputMode,
+        cudnnDirectionMode_t direction,
+        cudnnRNNMode_t mode,
+        cudnnDataType_t dataType);
     """
 
     # Parse
@@ -656,6 +696,55 @@ class PoolingDescriptor(Descriptor):
                 padding_vh[0], padding_vh[1], stride_vh[0], stride_vh[1])
         if err:
             raise CU.error("cudnnSetPooling2dDescriptor", err)
+
+
+class DropoutDescriptor(Descriptor):
+    """CUDNN dropout descriptor.
+    """
+    def _create(self):
+        handle = ffi.new("cudnnDropoutDescriptor_t *")
+        err = lib.cudnnCreateDropoutDescriptor(handle)
+        if err:
+            raise CU.error("cudnnCreateDropoutDescriptor", err)
+        self._handle = int(handle[0])
+
+    def _destroy(self):
+        self._lib.cudnnDestroyDropoutDescriptor(self.handle)
+
+
+class RNNDescriptor(Descriptor):
+    """CUDNN RNN descriptor.
+    """
+    def _create(self):
+        handle = ffi.new("cudnnRNNDescriptor_t *")
+        err = lib.cudnnCreateRNNDescriptor(handle)
+        if err:
+            raise CU.error("cudnnCreateRNNDescriptor", err)
+        self._handle = int(handle[0])
+
+    def _destroy(self):
+        self._lib.cudnnDestroyRNNDescriptor(self.handle)
+
+    def set(self, hidden_size, seq_length, num_layers, dropout_desc,
+            input_mode=CUDNN_LINEAR_INPUT, direction=CUDNN_UNIDIRECTIONAL,
+            mode=CUDNN_LSTM, data_type=CUDNN_DATA_FLOAT):
+        """Initializes RNN descriptor.
+
+        Parameters:
+            hidden_size: size of the internal hidden state for each layer.
+            seq_length: number of iterations to unroll over.
+            num_layers: number of layers.
+            dropout_desc: DropoutDescriptor instance.
+            input_mode: specifies the behavior at the input to the first layer.
+            direction: specifies the recurrence pattern, e.g. bidirectional.
+            mode: the type of RNN to compute.
+            data_type: math precision.
+        """
+        err = self._lib.cudnnSetRNNDescriptor(
+            self.handle, hidden_size, seq_length, num_layers, dropout_desc,
+            input_mode, direction, mode, data_type)
+        if err:
+            raise CU.error("cudnnSetRNNDescriptor", err)
 
 
 class CUDNN(object):

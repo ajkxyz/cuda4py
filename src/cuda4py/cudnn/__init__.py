@@ -43,6 +43,8 @@ from cuda4py.cudnn._cudnn import (
     FilterDescriptor,
     ConvolutionDescriptor,
     PoolingDescriptor,
+    DropoutDescriptor,
+    RNNDescriptor,
     initialize,
 
     CUDNN_STATUS_SUCCESS,
@@ -98,4 +100,18 @@ from cuda4py.cudnn._cudnn import (
 
     CUDNN_POOLING_MAX,
     CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING,
-    CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING)
+    CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING,
+
+    CUDNN_NOT_PROPAGATE_NAN,
+    CUDNN_PROPAGATE_NAN,
+
+    CUDNN_RNN_RELU,
+    CUDNN_RNN_TANH,
+    CUDNN_LSTM,
+    CUDNN_GRU,
+
+    CUDNN_UNIDIRECTIONAL,
+    CUDNN_BIDIRECTIONAL,
+
+    CUDNN_LINEAR_INPUT,
+    CUDNN_SKIP_INPUT)

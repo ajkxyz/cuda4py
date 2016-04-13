@@ -127,6 +127,20 @@ class Test(unittest.TestCase):
         self.assertEqual(cudnn.CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING, 1)
         self.assertEqual(cudnn.CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING, 2)
 
+        self.assertEqual(cudnn.CUDNN_NOT_PROPAGATE_NAN, 0)
+        self.assertEqual(cudnn.CUDNN_PROPAGATE_NAN, 1)
+
+        self.assertEqual(cudnn.CUDNN_RNN_RELU, 0)
+        self.assertEqual(cudnn.CUDNN_RNN_TANH, 1)
+        self.assertEqual(cudnn.CUDNN_LSTM, 2)
+        self.assertEqual(cudnn.CUDNN_GRU, 3)
+
+        self.assertEqual(cudnn.CUDNN_UNIDIRECTIONAL, 0)
+        self.assertEqual(cudnn.CUDNN_BIDIRECTIONAL, 1)
+
+        self.assertEqual(cudnn.CUDNN_LINEAR_INPUT, 0)
+        self.assertEqual(cudnn.CUDNN_SKIP_INPUT, 1)
+
     def test_errors(self):
         idx = cu.CU.ERRORS[cudnn.CUDNN_STATUS_NOT_INITIALIZED].find(" | ")
         self.assertGreater(idx, 0)
@@ -486,6 +500,35 @@ class Test(unittest.TestCase):
         self.assertEqual(numpy.count_nonzero(numpy.isnan(grad_data)), 0)
 
         logging.debug("EXIT: test_pooling")
+
+    def test_dropout(self):
+        logging.debug("ENTER: test_dropout")
+
+        drop = cudnn.DropoutDescriptor()
+        # TODO(a.kazantsev): add test.
+        del drop
+
+        logging.debug("EXIT: test_dropout")
+
+    def _test_rnn(self, short):
+        drop = cudnn.DropoutDescriptor()
+        # TODO(a.kazantsev): initialize it.
+        rnn = cudnn.RNNDescriptor()
+        if short:
+            rnn.set(64, 32, 3, drop)
+        else:
+            rnn.set(64, 32, 3, drop, input_mode=cudnn.CUDNN_LINEAR_INPUT,
+                    direction=cudnn.CUDNN_UNIDIRECTIONAL,
+                    mode=cudnn.CUDNN_LSTM, data_type=cudnn.CUDNN_DATA_FLOAT)
+        # TODO(a.kazantsev): add test.
+
+    def test_rnn(self):
+        if self.cudnn.version < 5000:
+            return
+        logging.debug("ENTER: test_rnn")
+        for short in (True, False):
+            self._test_rnn(short)
+        logging.debug("EXIT: test_rnn")
 
 
 if __name__ == "__main__":
