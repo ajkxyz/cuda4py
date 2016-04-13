@@ -590,6 +590,14 @@ class CUDNN(object):
         if err:
             raise CU.error("cudnnTransformTensor", err)
 
+    @property
+    def dropout_states_size(self):
+        size = cudnnffi.ffi.new("size_t *")
+        err = self._lib.cudnnDropoutGetStatesSize(self.handle, size)
+        if err:
+            raise CU.error("cudnnDropoutGetStatesSize", err)
+        return int(size[0])
+
     def _release(self):
         if self._lib is not None and self.handle is not None:
             self._lib.cudnnDestroy(self.handle)

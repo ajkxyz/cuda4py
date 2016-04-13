@@ -466,9 +466,11 @@ def _initialize(backends):
         int horizontalStride);
 
     cudnnStatus_t cudnnCreateDropoutDescriptor(
-        cudnnDropoutDescriptor_t * dropoutDesc);
+        cudnnDropoutDescriptor_t *dropoutDesc);
     cudnnStatus_t cudnnDestroyDropoutDescriptor(
         cudnnDropoutDescriptor_t dropoutDesc);
+    cudnnStatus_t cudnnDropoutGetStatesSize(
+        cudnnHandle_t handle, size_t *sizeInBytes);
 
     cudnnStatus_t cudnnCreateRNNDescriptor(cudnnRNNDescriptor_t *rnnDesc);
     cudnnStatus_t cudnnDestroyRNNDescriptor(cudnnRNNDescriptor_t rnnDesc);

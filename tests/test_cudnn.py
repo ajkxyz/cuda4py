@@ -506,6 +506,10 @@ class Test(unittest.TestCase):
             return
         logging.debug("ENTER: test_dropout")
 
+        drop_ss = self.cudnn.dropout_states_size
+        self.assertIsInstance(drop_ss, int)
+        logging.debug("Dropout states size is %d", drop_ss)
+
         drop = cudnn.DropoutDescriptor()
         # TODO(a.kazantsev): add test.
         del drop
