@@ -570,20 +570,25 @@ class Test(unittest.TestCase):
 
         logging.debug("EXIT: test_dropout")
 
-    def _test_rnn(self, short):
+    def test_rnn(self):
+        if self.cudnn.version < 5000:
+            return
+        logging.debug("ENTER: test_rnn")
+
         drop = cudnn.DropoutDescriptor()
         drop_states = cu.MemAlloc(self.ctx, self.cudnn.dropout_states_size)
         self.cudnn.set_dropout_descriptor(
             drop, 0.5, drop_states, drop_states.size, 1234)
 
         rnn = cudnn.RNNDescriptor()
-        n_unroll = 32
-        if short:
-            rnn.set(64, n_unroll, 3, drop)
-        else:
-            rnn.set(64, n_unroll, 3, drop, input_mode=cudnn.CUDNN_LINEAR_INPUT,
-                    direction=cudnn.CUDNN_UNIDIRECTIONAL,
-                    mode=cudnn.CUDNN_LSTM, data_type=cudnn.CUDNN_DATA_FLOAT)
+        self.assertEqual(rnn.hidden_size, 0)
+        self.assertEqual(rnn.seq_length, 0)
+        self.assertEqual(rnn.num_layers, 0)
+        self.assertIsNone(rnn.dropout_desc)
+        self.assertEqual(rnn.input_mode, -1)
+        self.assertEqual(rnn.direction, -1)
+        self.assertEqual(rnn.mode, -1)
+        self.assertEqual(rnn.data_type, -1)
 
         x = numpy.zeros((5, 1, 1, 64), dtype=numpy.float32)
         numpy.random.seed(1234)
@@ -591,20 +596,56 @@ class Test(unittest.TestCase):
         x_desc = cudnn.TensorDescriptor()
         x_desc.set_4d(cudnn.CUDNN_TENSOR_NCHW, cudnn.CUDNN_DATA_FLOAT,
                       *x.shape)
-        x_descs = list(x_desc for _i in range(n_unroll))
-        sz = self.cudnn.get_rnn_workspace_size(rnn, x_descs)
+        n_unroll = 32
+
+        try:
+            self.cudnn.get_rnn_workspace_size(
+                rnn, (x_desc for _i in range(n_unroll)))
+            raise RuntimeError("Control should not reach here")
+        except ValueError:
+            pass
+
+        def assert_values():
+            self.assertEqual(rnn.hidden_size, 64)
+            self.assertEqual(rnn.seq_length, n_unroll)
+            self.assertEqual(rnn.num_layers, 3)
+            self.assertIs(rnn.dropout_desc, drop)
+            self.assertEqual(rnn.input_mode, cudnn.CUDNN_LINEAR_INPUT)
+            self.assertEqual(rnn.direction, cudnn.CUDNN_UNIDIRECTIONAL)
+            self.assertEqual(rnn.mode, cudnn.CUDNN_LSTM)
+            self.assertEqual(rnn.data_type, cudnn.CUDNN_DATA_FLOAT)
+
+        # Short syntax
+        rnn.set(64, n_unroll, 3, drop)
+        assert_values()
+
+        # Full syntax
+        rnn = cudnn.RNNDescriptor()
+        rnn.set(64, n_unroll, 3, drop, input_mode=cudnn.CUDNN_LINEAR_INPUT,
+                direction=cudnn.CUDNN_UNIDIRECTIONAL,
+                mode=cudnn.CUDNN_LSTM, data_type=cudnn.CUDNN_DATA_FLOAT)
+        assert_values()
+
+        try:
+            sz = self.cudnn.get_rnn_workspace_size(
+                rnn, (x_desc for _i in range(n_unroll - 1)))
+            raise RuntimeError("Control should not reach here")
+        except ValueError:
+            pass
+        try:
+            sz = self.cudnn.get_rnn_workspace_size(
+                rnn, (x_desc for _i in range(n_unroll + 1)))
+            raise RuntimeError("Control should not reach here")
+        except ValueError:
+            pass
+        sz = self.cudnn.get_rnn_workspace_size(
+            rnn, (x_desc for _i in range(n_unroll)))
         self.assertIsInstance(sz, int)
         logging.debug("RNN workspace size for %s with %d unrolls is %d",
                       x.shape, n_unroll, sz)
 
         # TODO(a.kazantsev): add test.
 
-    def test_rnn(self):
-        if self.cudnn.version < 5000:
-            return
-        logging.debug("ENTER: test_rnn")
-        for short in (True, False):
-            self._test_rnn(short)
         logging.debug("EXIT: test_rnn")
 
 

@@ -244,6 +244,65 @@ class DropoutDescriptor(Descriptor):
 class RNNDescriptor(Descriptor):
     """CUDNN RNN descriptor.
     """
+    def __init__(self):
+        super(RNNDescriptor, self).__init__()
+        self._hidden_size = 0
+        self._seq_length = 0
+        self._num_layers = 0
+        self._dropout_desc = None
+        self._input_mode = -1
+        self._direction = -1
+        self._mode = -1
+        self._data_type = -1
+
+    @property
+    def hidden_size(self):
+        """Size of the internal hidden state for each layer.
+        """
+        return self._hidden_size
+
+    @property
+    def seq_length(self):
+        """Number of iterations to unroll over.
+        """
+        return self._seq_length
+
+    @property
+    def num_layers(self):
+        """Number of layers.
+        """
+        return self._num_layers
+
+    @property
+    def dropout_desc(self):
+        """Dropout descriptor.
+        """
+        return self._dropout_desc
+
+    @property
+    def input_mode(self):
+        """Behavior at the input to the first layer.
+        """
+        return self._input_mode
+
+    @property
+    def direction(self):
+        """Recurrence pattern, e.g. bidirectional.
+        """
+        return self._direction
+
+    @property
+    def mode(self):
+        """The type of RNN.
+        """
+        return self._mode
+
+    @property
+    def data_type(self):
+        """Math precision.
+        """
+        return self._data_type
+
     def _create(self):
         handle = cudnnffi.ffi.new("cudnnRNNDescriptor_t *")
         err = self._lib.cudnnCreateRNNDescriptor(handle)
@@ -274,6 +333,14 @@ class RNNDescriptor(Descriptor):
             input_mode, direction, mode, data_type)
         if err:
             raise CU.error("cudnnSetRNNDescriptor", err)
+        self._hidden_size = hidden_size
+        self._seq_length = seq_length
+        self._num_layers = num_layers
+        self._dropout_desc = dropout_desc
+        self._input_mode = input_mode
+        self._direction = direction
+        self._mode = mode
+        self._data_type = data_type
 
 
 class CUDNN(object):
@@ -669,11 +736,23 @@ class CUDNN(object):
             raise CU.error("cudnnDropoutBackward", err)
 
     def get_rnn_workspace_size(self, rnn_desc, xdescs):
+        """Gets the amount of work space required to execute the RNN.
+
+        Parameters:
+            rnn_desc: RNNDescriptor instance.
+            xdescs: iterable of the descriptors of the input
+                    for each unroll step.
         """
-        """
+        if rnn_desc.seq_length <= 0:
+            raise ValueError("rnn_desc.set() should be called beforehand")
+        xdescs = tuple(xdescs)
+        if len(xdescs) != rnn_desc.seq_length:
+            raise ValueError(
+                "Length of xdescs should be equal to the rnn_desc.seq_length")
         size = cudnnffi.ffi.new("size_t *")
-        _xdescs = cudnnffi.ffi.new("cudnnTensorDescriptor_t[]", len(xdescs))
-        _xdescs[0:len(xdescs)] = xdescs
+        _xdescs = cudnnffi.ffi.new(
+            "cudnnTensorDescriptor_t[]", rnn_desc.seq_length)
+        _xdescs[0:rnn_desc.seq_length] = xdescs
         err = self._lib.cudnnGetRNNWorkspaceSize(
             self.handle, rnn_desc, _xdescs, size)
         if err:
