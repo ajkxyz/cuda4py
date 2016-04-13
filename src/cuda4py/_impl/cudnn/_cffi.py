@@ -480,6 +480,24 @@ def _initialize(backends):
         intptr_t states,
         size_t stateSizeInBytes,
         unsigned long long seed);
+    cudnnStatus_t cudnnDropoutForward(
+        cudnnHandle_t handle,
+        const cudnnDropoutDescriptor_t dropoutDesc,
+        const cudnnTensorDescriptor_t xdesc,
+        const intptr_t x,
+        const cudnnTensorDescriptor_t ydesc,
+        intptr_t y,
+        intptr_t reserveSpace,
+        size_t reserveSpaceSizeInBytes);
+    cudnnStatus_t cudnnDropoutBackward(
+        cudnnHandle_t handle,
+        const cudnnDropoutDescriptor_t dropoutDesc,
+        const cudnnTensorDescriptor_t dydesc,
+        const intptr_t dy,
+        const cudnnTensorDescriptor_t dxdesc,
+        intptr_t dx,
+        intptr_t reserveSpace,
+        size_t reserveSpaceSizeInBytes);
 
     cudnnStatus_t cudnnCreateRNNDescriptor(cudnnRNNDescriptor_t *rnnDesc);
     cudnnStatus_t cudnnDestroyRNNDescriptor(cudnnRNNDescriptor_t rnnDesc);

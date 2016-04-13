@@ -629,6 +629,45 @@ class CUDNN(object):
         if err:
             raise CU.error("cudnnSetDropoutDescriptor", err)
 
+    def dropout_forward(self, dropout_desc, xdesc, x, ydesc, y,
+                        reserve_space, reserve_space_size):
+        """Does dropout forward propagation.
+
+        Parameters:
+            droput_desc: DropoutDescriptor instance.
+            xdesc: TensorDescriptor for the input.
+            x: input.
+            ydesc: TensorDescriptor for the output.
+            y: output.
+            reserve_space: result state of the dropout operation,
+                           should be passed to dropout_backward.
+            reserve_space_size: size of the reserve_space.
+        """
+        err = self._lib.cudnnDropoutForward(
+            self.handle, dropout_desc, xdesc, x, ydesc, y,
+            reserve_space, reserve_space_size)
+        if err:
+            raise CU.error("cudnnDropoutForward", err)
+
+    def dropout_backward(self, dropout_desc, dydesc, dy, dxdesc, dx,
+                         reserve_space, reserve_space_size):
+        """Does dropout backward propagation.
+
+        Parameters:
+            droput_desc: DropoutDescriptor instance.
+            dydesc: TensorDescriptor for the error to backpropagate.
+            dy: error to backpropagate.
+            dxdesc: TensorDescriptor for the backpropagated error.
+            dx: backpropagated error.
+            reserve_space: result state of the dropout operation.
+            reserve_space_size: size of the reserve_space.
+        """
+        err = self._lib.cudnnDropoutBackward(
+            self.handle, dropout_desc, dydesc, dy, dxdesc, dx,
+            reserve_space, reserve_space_size)
+        if err:
+            raise CU.error("cudnnDropoutBackward", err)
+
     def _release(self):
         if self._lib is not None and self.handle is not None:
             self._lib.cudnnDestroy(self.handle)

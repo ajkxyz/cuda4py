@@ -510,13 +510,14 @@ class Test(unittest.TestCase):
         self.assertIsInstance(drop_ss, int)
         logging.debug("Dropout states size is %d", drop_ss)
 
-        input_data = numpy.zeros((5, 96, 64, 48), dtype=numpy.float32)
+        input_data = numpy.zeros((5, 16, 32, 24), dtype=numpy.float32)
+        numpy.random.seed(1234)
         input_data[:] = numpy.random.rand(input_data.size).reshape(
             input_data.shape) - 0.5
         input_desc = cudnn.TensorDescriptor()
         input_desc.set_4d(cudnn.CUDNN_TENSOR_NCHW, cudnn.CUDNN_DATA_FLOAT,
                           *input_data.shape)
-        # input_buf = cu.MemAlloc(self.ctx, input_data)
+
         drop_rss = input_desc.dropout_reserve_space_size
         self.assertIsInstance(drop_rss, int)
         logging.debug("Dropout reserve space size for %s is %d",
@@ -527,7 +528,45 @@ class Test(unittest.TestCase):
         states = cu.MemAlloc(self.ctx, drop_ss)
         self.cudnn.set_dropout_descriptor(drop, 0.5, states, drop_ss, 1234)
 
-        # TODO(a.kazantsev): add tests for dropout forward and backward.
+        input_buf = cu.MemAlloc(self.ctx, input_data)
+        output_buf = cu.MemAlloc(self.ctx, input_buf.size)
+        reserve = cu.MemAlloc(self.ctx, drop_rss)
+
+        self.cudnn.dropout_forward(drop, input_desc, input_buf, input_desc,
+                                   output_buf, reserve, reserve.size)
+        output_data = numpy.ones_like(input_data)
+        output_buf.to_host(output_data)
+        n_z = 0
+        for i, y in numpy.ndenumerate(output_data):
+            if not y:
+                n_z += 1
+                continue
+            x = input_data[i]
+            self.assertEqual(y, x * 2)
+        self.assertGreater(n_z, (input_data.size >> 1) -
+                           (input_data.size >> 5))
+
+        err_data = numpy.ones_like(input_data)
+        err_data[:] = numpy.random.rand(output_data.size).reshape(
+            output_data.shape) - 0.5
+        err_buf = cu.MemAlloc(self.ctx, err_data)
+        self.cudnn.dropout_backward(drop, input_desc, err_buf, input_desc,
+                                    input_buf, reserve, reserve.size)
+        input_buf.to_host(input_data)
+        n_z = 0
+        for i, x in numpy.ndenumerate(input_data):
+            if not output_data[i]:
+                self.assertEqual(x, 0.0)
+                n_z += 1
+                continue
+            y = err_data[i]
+            if self.cudnn.version == 5004:
+                self.assertEqual(x, y)  # strangely, it doesn't scale gradient
+            else:
+                # self.assertEqual(x, y * 2)
+                pass
+        self.assertGreater(n_z, (input_data.size >> 1) -
+                           (input_data.size >> 5))
 
         logging.debug("EXIT: test_dropout")
 
