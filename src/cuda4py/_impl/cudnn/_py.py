@@ -113,6 +113,17 @@ class TensorDescriptor(Descriptor):
         if err:
             raise CU.error("cudnnSetTensor4dDescriptor", err)
 
+    @property
+    def dropout_reserve_space_size(self):
+        """Returns the amount of reserve needed to run dropout with the
+        current tensor.
+        """
+        size = cudnnffi.ffi.new("size_t *")
+        err = self._lib.cudnnDropoutGetReserveSpaceSize(self.handle, size)
+        if err:
+            raise CU.error("cudnnDropoutGetReserveSpaceSize", err)
+        return int(size[0])
+
 
 class FilterDescriptor(Descriptor):
     """CUDNN filter descriptor.
@@ -592,6 +603,9 @@ class CUDNN(object):
 
     @property
     def dropout_states_size(self):
+        """Returns the amount of space required to store the states of the
+        random number generators for dropout operation.
+        """
         size = cudnnffi.ffi.new("size_t *")
         err = self._lib.cudnnDropoutGetStatesSize(self.handle, size)
         if err:

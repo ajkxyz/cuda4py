@@ -471,6 +471,8 @@ def _initialize(backends):
         cudnnDropoutDescriptor_t dropoutDesc);
     cudnnStatus_t cudnnDropoutGetStatesSize(
         cudnnHandle_t handle, size_t *sizeInBytes);
+    cudnnStatus_t cudnnDropoutGetReserveSpaceSize(
+        cudnnTensorDescriptor_t xdesc, size_t *sizeInBytes);
 
     cudnnStatus_t cudnnCreateRNNDescriptor(cudnnRNNDescriptor_t *rnnDesc);
     cudnnStatus_t cudnnDestroyRNNDescriptor(cudnnRNNDescriptor_t rnnDesc);

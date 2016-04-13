@@ -510,6 +510,18 @@ class Test(unittest.TestCase):
         self.assertIsInstance(drop_ss, int)
         logging.debug("Dropout states size is %d", drop_ss)
 
+        input_data = numpy.zeros((5, 96, 64, 48), dtype=numpy.float32)
+        input_data[:] = numpy.random.rand(input_data.size).reshape(
+            input_data.shape) - 0.5
+        input_desc = cudnn.TensorDescriptor()
+        input_desc.set_4d(cudnn.CUDNN_TENSOR_NCHW, cudnn.CUDNN_DATA_FLOAT,
+                          *input_data.shape)
+        # input_buf = cu.MemAlloc(self.ctx, input_data)
+        drop_rss = input_desc.dropout_reserve_space_size
+        self.assertIsInstance(drop_rss, int)
+        logging.debug("Dropout reserve space size for %s is %d",
+                      input_data.shape, drop_rss)
+
         drop = cudnn.DropoutDescriptor()
         # TODO(a.kazantsev): add test.
         del drop
