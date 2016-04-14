@@ -779,6 +779,21 @@ class CUDNN(object):
             raise CU.error("cudnnGetRNNTrainingReserveSize", err)
         return int(size[0])
 
+    def get_rnn_params_size(self, rnn_desc, xdescs):
+        """Gets the amount of parameter space required to execute the RNN.
+
+        Parameters:
+            rnn_desc: RNNDescriptor instance.
+            xdescs: iterable of the descriptors of the input
+                    for each unroll step.
+        """
+        size = cudnnffi.ffi.new("size_t *")
+        err = self._lib.cudnnGetRNNParamsSize(
+            self.handle, rnn_desc, rnn_desc._xdescs_to_cffi(xdescs), size)
+        if err:
+            raise CU.error("cudnnGetRNNParamsSize", err)
+        return int(size[0])
+
     def _release(self):
         if self._lib is not None and self.handle is not None:
             self._lib.cudnnDestroy(self.handle)

@@ -521,6 +521,11 @@ def _initialize(backends):
         const cudnnRNNDescriptor_t rnnDesc,
         const cudnnTensorDescriptor_t *xDesc,
         size_t *sizeInBytes);
+    cudnnStatus_t cudnnGetRNNParamsSize(
+        cudnnHandle_t handle,
+        const cudnnRNNDescriptor_t rnnDesc,
+        const cudnnTensorDescriptor_t *xDesc,
+        size_t *sizeInBytes);
     """
 
     # Parse

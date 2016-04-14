@@ -649,6 +649,10 @@ class Test(unittest.TestCase):
         logging.debug("RNN train size for %s with %d unrolls is %d",
                       x.shape, n_unroll, sz_train)
 
+        sz_params = get_sz(self.cudnn.get_rnn_params_size)
+        logging.debug("RNN params size for %s with %d unrolls is %d",
+                      x.shape, n_unroll, sz_params)
+
         # TODO(a.kazantsev): add test.
 
         logging.debug("EXIT: test_rnn")
