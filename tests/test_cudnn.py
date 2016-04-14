@@ -626,23 +626,28 @@ class Test(unittest.TestCase):
                 mode=cudnn.CUDNN_LSTM, data_type=cudnn.CUDNN_DATA_FLOAT)
         assert_values()
 
-        try:
-            sz = self.cudnn.get_rnn_workspace_size(
-                rnn, (x_desc for _i in range(n_unroll - 1)))
-            raise RuntimeError("Control should not reach here")
-        except ValueError:
-            pass
-        try:
-            sz = self.cudnn.get_rnn_workspace_size(
-                rnn, (x_desc for _i in range(n_unroll + 1)))
-            raise RuntimeError("Control should not reach here")
-        except ValueError:
-            pass
-        sz = self.cudnn.get_rnn_workspace_size(
-            rnn, (x_desc for _i in range(n_unroll)))
-        self.assertIsInstance(sz, int)
+        def get_sz(func):
+            try:
+                sz = func(rnn, (x_desc for _i in range(n_unroll - 1)))
+                raise RuntimeError("Control should not reach here")
+            except ValueError:
+                pass
+            try:
+                sz = func(rnn, (x_desc for _i in range(n_unroll + 1)))
+                raise RuntimeError("Control should not reach here")
+            except ValueError:
+                pass
+            sz = func(rnn, (x_desc for _i in range(n_unroll)))
+            self.assertIsInstance(sz, int)
+            return sz
+
+        sz_work = get_sz(self.cudnn.get_rnn_workspace_size)
         logging.debug("RNN workspace size for %s with %d unrolls is %d",
-                      x.shape, n_unroll, sz)
+                      x.shape, n_unroll, sz_work)
+
+        sz_train = get_sz(self.cudnn.get_rnn_training_reserve_size)
+        logging.debug("RNN train size for %s with %d unrolls is %d",
+                      x.shape, n_unroll, sz_train)
 
         # TODO(a.kazantsev): add test.
 

@@ -342,6 +342,20 @@ class RNNDescriptor(Descriptor):
         self._mode = mode
         self._data_type = data_type
 
+    def _xdescs_to_cffi(self, xdescs):
+        """Converts iterable of input descriptors to cffi array.
+        """
+        if self.seq_length <= 0:
+            raise ValueError("rnn_desc.set() should be called beforehand")
+        xdescs = tuple(xdescs)
+        if len(xdescs) != self.seq_length:
+            raise ValueError(
+                "Length of xdescs should be equal to the rnn_desc.seq_length")
+        _xdescs = cudnnffi.ffi.new(
+            "cudnnTensorDescriptor_t[]", self.seq_length)
+        _xdescs[0:self.seq_length] = xdescs
+        return _xdescs
+
 
 class CUDNN(object):
     """CUDNN functions can be invoked from this class.
@@ -743,20 +757,26 @@ class CUDNN(object):
             xdescs: iterable of the descriptors of the input
                     for each unroll step.
         """
-        if rnn_desc.seq_length <= 0:
-            raise ValueError("rnn_desc.set() should be called beforehand")
-        xdescs = tuple(xdescs)
-        if len(xdescs) != rnn_desc.seq_length:
-            raise ValueError(
-                "Length of xdescs should be equal to the rnn_desc.seq_length")
         size = cudnnffi.ffi.new("size_t *")
-        _xdescs = cudnnffi.ffi.new(
-            "cudnnTensorDescriptor_t[]", rnn_desc.seq_length)
-        _xdescs[0:rnn_desc.seq_length] = xdescs
         err = self._lib.cudnnGetRNNWorkspaceSize(
-            self.handle, rnn_desc, _xdescs, size)
+            self.handle, rnn_desc, rnn_desc._xdescs_to_cffi(xdescs), size)
         if err:
             raise CU.error("cudnnGetRNNWorkspaceSize", err)
+        return int(size[0])
+
+    def get_rnn_training_reserve_size(self, rnn_desc, xdescs):
+        """Gets the amount of work space required to train the RNN.
+
+        Parameters:
+            rnn_desc: RNNDescriptor instance.
+            xdescs: iterable of the descriptors of the input
+                    for each unroll step.
+        """
+        size = cudnnffi.ffi.new("size_t *")
+        err = self._lib.cudnnGetRNNTrainingReserveSize(
+            self.handle, rnn_desc, rnn_desc._xdescs_to_cffi(xdescs), size)
+        if err:
+            raise CU.error("cudnnGetRNNTrainingReserveSize", err)
         return int(size[0])
 
     def _release(self):
