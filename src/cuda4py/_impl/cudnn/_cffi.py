@@ -203,10 +203,25 @@ def _initialize(backends):
         cudnnTensorDescriptor_t tensorDesc,
         cudnnTensorFormat_t format,
         cudnnDataType_t dataType,
-        int n,
-        int c,
-        int h,
-        int w);
+        int n, int c, int h, int w);
+    cudnnStatus_t cudnnGetTensor4dDescriptor(
+        const cudnnTensorDescriptor_t tensorDesc,
+        cudnnDataType_t *dataType,
+        int *n, int *c, int *h, int *w,
+        int *nStride, int *cStride, int *hStride, int *wStride);
+    cudnnStatus_t cudnnSetTensorNdDescriptor(
+        cudnnTensorDescriptor_t tensorDesc,
+        cudnnDataType_t dataType,
+        int nbDims,
+        const int *dimA,
+        const int *strideA);
+    cudnnStatus_t cudnnGetTensorNdDescriptor(
+        const cudnnTensorDescriptor_t tensorDesc,
+        int nbDimsRequested,
+        cudnnDataType_t *dataType,
+        int *nbDims,
+        int *dimA,
+        int *strideA);
 
     cudnnStatus_t cudnnCreateFilterDescriptor(
         cudnnFilterDescriptor_t *filterDesc);
@@ -231,10 +246,7 @@ def _initialize(backends):
         const cudnnConvolutionDescriptor_t convDesc,
         const cudnnTensorDescriptor_t inputTensorDesc,
         const cudnnFilterDescriptor_t filterDesc,
-        int *n,
-        int *c,
-        int *h,
-        int *w);
+        int *n, int *c, int *h, int *w);
 
     cudnnStatus_t cudnnGetConvolutionForwardAlgorithm(
         cudnnHandle_t handle,
@@ -421,10 +433,7 @@ def _initialize(backends):
     cudnnStatus_t cudnnSetFilter4dDescriptor(
         cudnnFilterDescriptor_t filterDesc,
         cudnnDataType_t dataType,
-        int k,
-        int c,
-        int h,
-        int w);
+        int k, int c, int h, int w);
 
     cudnnStatus_t cudnnSetPooling2dDescriptor(
         cudnnPoolingDescriptor_t poolingDesc,
@@ -449,10 +458,25 @@ def _initialize(backends):
         cudnnFilterDescriptor_t filterDesc,
         cudnnDataType_t dataType,
         cudnnTensorFormat_t format,
-        int k,
-        int c,
-        int h,
-        int w);
+        int k, int c, int h, int w);
+    cudnnStatus_t cudnnGetFilter4dDescriptor(
+        const cudnnFilterDescriptor_t filterDesc,
+        cudnnDataType_t *dataType,
+        cudnnTensorFormat_t *format,
+        int *k, int *c, int *h, int *w);
+    cudnnStatus_t cudnnSetFilterNdDescriptor(
+        cudnnFilterDescriptor_t filterDesc,
+        cudnnDataType_t dataType,
+        cudnnTensorFormat_t format,
+        int nbDims,
+        const int *filterDimA);
+    cudnnStatus_t cudnnGetFilterNdDescriptor(
+        const cudnnFilterDescriptor_t filterDesc,
+        int nbDimsRequested,
+        cudnnDataType_t *dataType,
+        cudnnTensorFormat_t *format,
+        int *nbDims,
+        int *filterDimA);
 
     cudnnStatus_t cudnnSetPooling2dDescriptor(
         cudnnPoolingDescriptor_t poolingDesc,
@@ -526,6 +550,26 @@ def _initialize(backends):
         const cudnnRNNDescriptor_t rnnDesc,
         const cudnnTensorDescriptor_t *xDesc,
         size_t *sizeInBytes);
+    cudnnStatus_t cudnnGetRNNLinLayerMatrixParams(
+        cudnnHandle_t handle,
+        const cudnnRNNDescriptor_t rnnDesc,
+        const int layer,
+        const cudnnTensorDescriptor_t *xDesc,
+        const cudnnFilterDescriptor_t wDesc,
+        const intptr_t w,
+        const int linLayerID,
+        cudnnFilterDescriptor_t linLayerMatDesc,
+        intptr_t *linLayerMat);
+    cudnnStatus_t cudnnGetRNNLinLayerBiasParams(
+        cudnnHandle_t handle,
+        const cudnnRNNDescriptor_t rnnDesc,
+        const int layer,
+        const cudnnTensorDescriptor_t *xDesc,
+        const cudnnFilterDescriptor_t wDesc,
+        const intptr_t w,
+        const int linLayerID,
+        cudnnFilterDescriptor_t linLayerBiasDesc,
+        intptr_t *linLayerBias);
     """
 
     # Parse

@@ -150,19 +150,119 @@ class Test(unittest.TestCase):
         self.assertEqual(self.cudnn.version, int(self.cudnn.version))
 
     def test_tensor_descriptor(self):
+        logging.debug("ENTER: test_tensor_descriptor")
         d = cudnn.TensorDescriptor()
         self.assertIsNotNone(d.handle)
         for dt in (cudnn.CUDNN_DATA_DOUBLE, cudnn.CUDNN_DATA_FLOAT):
             for fmt in (cudnn.CUDNN_TENSOR_NCHW, cudnn.CUDNN_TENSOR_NHWC):
                 d.set_4d(fmt, dt, 100, 50, 217, 215)
-        del d
+                self.assertEqual(d.fmt, fmt)
+                self.assertEqual(d.data_type, dt)
+                self.assertEqual(d.n, 100)
+                self.assertEqual(d.c, 50)
+                self.assertEqual(d.h, 217)
+                self.assertEqual(d.w, 215)
+                d.get_nd(4)
+                if fmt == cudnn.CUDNN_TENSOR_NCHW:
+                    logging.debug("NCHW: %s %s", d.dims, d.strides)
+                    self.assertEqual(d.dims, (100, 50, 217, 215))
+                    self.assertEqual(
+                        d.strides, (50 * 217 * 215, 217 * 215, 215, 1))
+                elif fmt == cudnn.CUDNN_TENSOR_NHWC:
+                    logging.debug("NHWC: %s %s", d.dims, d.strides)
+                    self.assertEqual(d.dims, (100, 50, 217, 215))
+                    self.assertEqual(d.strides,
+                                     (50 * 217 * 215, 1, 215 * 50, 50))
+
+        d = cudnn.TensorDescriptor()
+        self.assertEqual(len(d.dims), 0)
+        self.assertEqual(len(d.strides), 0)
+
+        d.set_nd(cudnn.CUDNN_DATA_FLOAT, (1, 2, 3))
+        self.assertEqual(d.data_type, cudnn.CUDNN_DATA_FLOAT)
+        self.assertEqual(d.dims, (1, 2, 3))
+        self.assertEqual(d.strides, (2, 1, 1))
+        d._data_type = -1
+        d._fmt = -1
+        d._dims = tuple()
+        d.get_nd(3)
+        self.assertEqual(d.data_type, cudnn.CUDNN_DATA_FLOAT)
+        self.assertEqual(d.dims, (1, 2, 3))
+        self.assertEqual(d.strides, (2, 1, 1))
+
+        logging.debug("EXIT: test_tensor_descriptor")
 
     def test_filter_descriptor(self):
+        logging.debug("ENTER: test_filter_descriptor")
+
         d = cudnn.FilterDescriptor()
         self.assertIsNotNone(d.handle)
         for dt in (cudnn.CUDNN_DATA_DOUBLE, cudnn.CUDNN_DATA_FLOAT):
             d.set_4d(dt, 64, 3, 11, 12)
-        del d
+            self.assertEqual(d.data_type, dt)
+            self.assertEqual(d.fmt, cudnn.CUDNN_TENSOR_NCHW)
+            self.assertEqual(d.k, 64)
+            self.assertEqual(d.c, 3)
+            self.assertEqual(d.h, 11)
+            self.assertEqual(d.w, 12)
+
+        if self.cudnn.version < 5000:
+            logging.debug("EXIT: test_filter_descriptor")
+            return
+
+        d = cudnn.FilterDescriptor()
+        self.assertEqual(d.data_type, -1)
+        self.assertEqual(d.fmt, -1)
+        self.assertEqual(d.k, 0)
+        self.assertEqual(d.c, 0)
+        self.assertEqual(d.h, 0)
+        self.assertEqual(d.w, 0)
+
+        def assert_attrs():
+            self.assertEqual(d.data_type, cudnn.CUDNN_DATA_FLOAT)
+            self.assertEqual(d.fmt, cudnn.CUDNN_TENSOR_NCHW)
+            self.assertEqual(d.k, 10)
+            self.assertEqual(d.c, 5)
+            self.assertEqual(d.h, 32)
+            self.assertEqual(d.w, 16)
+
+        d.set_4d(cudnn.CUDNN_DATA_FLOAT, 10, 5, 32, 16)
+        assert_attrs()
+
+        d._data_type = -1
+        d._fmt = -1
+        d._k = 0
+        d._c = 0
+        d._h = 0
+        d._w = 0
+        d.get_4d()
+        assert_attrs()
+
+        d = cudnn.FilterDescriptor()
+        d.set_4d(cudnn.CUDNN_DATA_FLOAT, 10, 5, 32, 16,
+                 cudnn.CUDNN_TENSOR_NHWC)
+        self.assertEqual(d.fmt, cudnn.CUDNN_TENSOR_NHWC)
+
+        d = cudnn.FilterDescriptor()
+        self.assertEqual(len(d.dims), 0)
+
+        d.set_nd(cudnn.CUDNN_DATA_FLOAT, (1, 2, 3))
+        self.assertEqual(d.fmt, cudnn.CUDNN_TENSOR_NCHW)
+        self.assertEqual(d.data_type, cudnn.CUDNN_DATA_FLOAT)
+        self.assertEqual(d.dims, (1, 2, 3))
+        d._data_type = -1
+        d._fmt = -1
+        d._dims = tuple()
+        d.get_nd(3)
+        self.assertEqual(d.fmt, cudnn.CUDNN_TENSOR_NCHW)
+        self.assertEqual(d.data_type, cudnn.CUDNN_DATA_FLOAT)
+        self.assertEqual(d.dims, (1, 2, 3))
+
+        d = cudnn.FilterDescriptor()
+        d.set_nd(cudnn.CUDNN_DATA_FLOAT, (1, 2, 3), cudnn.CUDNN_TENSOR_NHWC)
+        self.assertEqual(d.fmt, cudnn.CUDNN_TENSOR_NHWC)
+
+        logging.debug("EXIT: test_filter_descriptor")
 
     def test_convolution_descriptor(self):
         d = cudnn.ConvolutionDescriptor()
@@ -589,6 +689,7 @@ class Test(unittest.TestCase):
         self.assertEqual(rnn.direction, -1)
         self.assertEqual(rnn.mode, -1)
         self.assertEqual(rnn.data_type, -1)
+        self.assertEqual(rnn.num_linear_layers, 0)
 
         x = numpy.zeros((5, 1, 1, 64), dtype=numpy.float32)
         numpy.random.seed(1234)
@@ -614,10 +715,17 @@ class Test(unittest.TestCase):
             self.assertEqual(rnn.direction, cudnn.CUDNN_UNIDIRECTIONAL)
             self.assertEqual(rnn.mode, cudnn.CUDNN_LSTM)
             self.assertEqual(rnn.data_type, cudnn.CUDNN_DATA_FLOAT)
+            self.assertEqual(rnn.num_linear_layers, 8)
 
         # Short syntax
         rnn.set(64, n_unroll, 3, drop)
         assert_values()
+        # Check num_linear_layers property
+        for mode, n in ((cudnn.CUDNN_RNN_RELU, 2), (cudnn.CUDNN_RNN_TANH, 2),
+                        (cudnn.CUDNN_GRU, 6)):
+            rnn = cudnn.RNNDescriptor()
+            rnn.set(64, n_unroll, 3, drop, mode=mode)
+            self.assertEqual(rnn.num_linear_layers, n)
 
         # Full syntax
         rnn = cudnn.RNNDescriptor()
@@ -652,6 +760,19 @@ class Test(unittest.TestCase):
         sz_params = get_sz(self.cudnn.get_rnn_params_size)
         logging.debug("RNN params size for %s with %d unrolls is %d",
                       x.shape, n_unroll, sz_params)
+
+        params_desc = cudnn.FilterDescriptor()
+        params_desc.set_4d(cudnn.CUDNN_DATA_FLOAT, 1, 1, 1, sz_params)
+        params = cu.MemAlloc(self.ctx, sz_params)
+        w_desc = cudnn.FilterDescriptor()
+        w = self.cudnn.get_rnn_lin_layer_matrix_params(
+            rnn, 0, (x_desc for _i in range(n_unroll)),
+            params_desc, params, 0, w_desc)
+        w_desc.get_4d()
+        logging.debug("Got matrix 0 of dimensions: %d %d %d %d, fmt=%d",
+                      w_desc.k, w_desc.c, w_desc.h, w_desc.w, w_desc.fmt)
+
+        # TODO(a.kazantsev): change "_4d" to "_nd" as required for RNN.
 
         # TODO(a.kazantsev): add test.
 

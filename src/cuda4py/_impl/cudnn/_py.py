@@ -40,14 +40,15 @@ import cuda4py._impl.cudnn._cffi as cudnnffi
 from cuda4py._impl.cudnn._cffi import (
     CUDNN_TENSOR_NCHW, CUDNN_CROSS_CORRELATION, CUDNN_POOLING_MAX,
     CUDNN_NOT_PROPAGATE_NAN, CUDNN_LINEAR_INPUT, CUDNN_UNIDIRECTIONAL,
-    CUDNN_LSTM, CUDNN_DATA_FLOAT, CUDNN_CONVOLUTION_FWD_PREFER_FASTEST,
+    CUDNN_RNN_RELU, CUDNN_RNN_TANH, CUDNN_LSTM, CUDNN_GRU, CUDNN_DATA_FLOAT,
+    CUDNN_CONVOLUTION_FWD_PREFER_FASTEST,
     CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST,
     CUDNN_CONVOLUTION_BWD_FILTER_SPECIFY_WORKSPACE_LIMIT,
     CUDNN_CONVOLUTION_BWD_FILTER_NO_WORKSPACE,
     CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST,
     CUDNN_CONVOLUTION_BWD_DATA_SPECIFY_WORKSPACE_LIMIT,
     CUDNN_CONVOLUTION_BWD_DATA_NO_WORKSPACE)
-from cuda4py._py import CU
+from cuda4py._py import CU, MemPtr
 
 
 class Descriptor(object):
@@ -84,9 +85,79 @@ class Descriptor(object):
         self._release()
 
 
-class TensorDescriptor(Descriptor):
+class DataDescriptor(Descriptor):
+    """Descriptor for data (tensor, filter).
+    """
+    def __init__(self):
+        super(DataDescriptor, self).__init__()
+        self._data_type = -1
+        self._fmt = -1
+        self._dims = tuple()
+        self._strides = tuple()
+        self._c = 0
+        self._h = 0
+        self._w = 0
+
+    @property
+    def data_type(self):
+        """Math precision.
+
+        CUDNN_DATA_FLOAT, CUDNN_DATA_DOUBLE or CUDNN_DATA_HALF.
+        """
+        return self._data_type
+
+    @property
+    def fmt(self):
+        """Descriptor format if applicable.
+
+        CUDNN_TENSOR_NCHW or CUDNN_TENSOR_NHWC.
+        """
+        return self._fmt
+
+    @property
+    def dims(self):
+        """Dimensions of a tensor.
+        """
+        return self._dims
+
+    @property
+    def strides(self):
+        """Strides of a tensor dimensions.
+        """
+        return self._strides
+
+    @property
+    def c(self):
+        """Number of image channels.
+        """
+        return self._c
+
+    @property
+    def h(self):
+        """Image height.
+        """
+        return self._h
+
+    @property
+    def w(self):
+        """Image width.
+        """
+        return self._w
+
+
+class TensorDescriptor(DataDescriptor):
     """CUDNN tensor descriptor.
     """
+    def __init__(self):
+        super(TensorDescriptor, self).__init__()
+        self._n = 0
+
+    @property
+    def n(self):
+        """Number of images.
+        """
+        return self._n
+
     def _create(self):
         handle = cudnnffi.ffi.new("cudnnTensorDescriptor_t *")
         err = self._lib.cudnnCreateTensorDescriptor(handle)
@@ -112,6 +183,67 @@ class TensorDescriptor(Descriptor):
             self.handle, fmt, data_type, n, c, h, w)
         if err:
             raise CU.error("cudnnSetTensor4dDescriptor", err)
+        self._fmt, self._data_type = int(fmt), int(data_type)
+        self._n, self._c, self._h, self._w = int(n), int(c), int(h), int(w)
+
+    def get_4d(self):
+        """Fills data_type, n, c, h, w properties.
+        """
+        data_type = cudnnffi.ffi.new("cudnnDataType_t *")
+        n, c, h, w = (cudnnffi.ffi.new("int *") for _i in range(4))
+        ns, cs, hs, ws = (cudnnffi.ffi.new("int *") for _i in range(4))
+        err = self._lib.cudnnGetTensor4dDescriptor(
+            self.handle, data_type, n, c, h, w, ns, cs, hs, ws)
+        if err:
+            raise CU.error("cudnnGetTensor4dDescriptor", err)
+        self._data_type, self._n, self._c, self._h, self._w = (
+            int(x[0]) for x in (data_type, n, c, h, w))
+
+    def set_nd(self, data_type, dims, strides=None):
+        """Initializes tensor descriptor.
+
+        Parameters:
+            data_type: data type.
+            dims: tuple of dimensions.
+            strides: tuple of strides of None to create compact layout.
+        """
+        if strides is not None and len(dims) != len(strides):
+            raise ValueError("len(dims) != len(strides)")
+        _dims = cudnnffi.ffi.new("int[]", len(dims))
+        _dims[0:len(dims)] = dims
+        _strides = cudnnffi.ffi.new("int[]", len(dims))
+        if strides is None:
+            sz = 1
+            for i, n in enumerate(dims):
+                _strides[len(dims) - 1 - i] = sz
+                sz *= n
+        else:
+            _strides[0:len(dims)] = strides
+        err = self._lib.cudnnSetTensorNdDescriptor(
+            self.handle, data_type, len(dims), _dims, _strides)
+        if err:
+            raise CU.error("cudnnSetTensorNdDescriptor", err)
+        self._data_type = int(data_type)
+        self._dims = tuple(int(x) for x in _dims)
+        self._strides = tuple(int(x) for x in _strides)
+
+    def get_nd(self, n_dims_requested):
+        """Fills data_type, dims and strides properties.
+
+        Parameters:
+            n_dims_requested: number of dimensions to extract information from.
+        """
+        data_type = cudnnffi.ffi.new("cudnnDataType_t *")
+        n_dims = cudnnffi.ffi.new("int *")
+        dims = cudnnffi.ffi.new("int[]", n_dims_requested)
+        strides = cudnnffi.ffi.new("int[]", n_dims_requested)
+        err = self._lib.cudnnGetTensorNdDescriptor(
+            self.handle, n_dims_requested, data_type, n_dims, dims, strides)
+        if err:
+            raise CU.error("cudnnGetTensorNdDescriptor", err)
+        self._data_type = int(data_type[0])
+        self._dims = tuple(int(x) for x in dims)
+        self._strides = tuple(int(x) for x in strides)
 
     @property
     def dropout_reserve_space_size(self):
@@ -125,9 +257,19 @@ class TensorDescriptor(Descriptor):
         return int(size[0])
 
 
-class FilterDescriptor(Descriptor):
+class FilterDescriptor(DataDescriptor):
     """CUDNN filter descriptor.
     """
+    def __init__(self):
+        super(FilterDescriptor, self).__init__()
+        self._k = 0
+
+    @property
+    def k(self):
+        """Number of kernels.
+        """
+        return self._k
+
     def _create(self):
         handle = cudnnffi.ffi.new("cudnnFilterDescriptor_t *")
         err = self._lib.cudnnCreateFilterDescriptor(handle)
@@ -152,11 +294,62 @@ class FilterDescriptor(Descriptor):
         if cudnnffi.cudnn_version < 5000:
             err = self._lib.cudnnSetFilter4dDescriptor(
                 self.handle, data_type, k, c, h, w)
+            self._fmt = CUDNN_TENSOR_NCHW
         else:
             err = self._lib.cudnnSetFilter4dDescriptor(
                 self.handle, data_type, fmt, k, c, h, w)
+            self._fmt = fmt
+        self._data_type = data_type
+        self._k, self._c, self._h, self._w = int(k), int(c), int(h), int(w)
         if err:
             raise CU.error("cudnnSetFilter4dDescriptor", err)
+
+    def get_4d(self):
+        """Fills data_type, fmt, k, c, h, w properties.
+        """
+        data_type = cudnnffi.ffi.new("cudnnDataType_t *")
+        fmt = cudnnffi.ffi.new("cudnnTensorFormat_t *")
+        k, c, h, w = (cudnnffi.ffi.new("int *") for _i in range(4))
+        err = self._lib.cudnnGetFilter4dDescriptor(
+            self.handle, data_type, fmt, k, c, h, w)
+        if err:
+            raise CU.error("cudnnGetFilter4dDescriptor", err)
+        self._data_type, self._fmt, self._k, self._c, self._h, self._w = (
+            int(x[0]) for x in (data_type, fmt, k, c, h, w))
+
+    def set_nd(self, data_type, dims, fmt=CUDNN_TENSOR_NCHW):
+        """Initializes tensor descriptor.
+
+        Parameters:
+            data_type: data type.
+            dims: tuple of dimensions.
+            fmt: tensor format.
+        """
+        _dims = cudnnffi.ffi.new("int[]", len(dims))
+        _dims[0:len(dims)] = dims
+        err = self._lib.cudnnSetFilterNdDescriptor(
+            self.handle, data_type, fmt, len(dims), _dims)
+        if err:
+            raise CU.error("cudnnSetFilterNdDescriptor", err)
+        self._data_type, self._fmt = int(data_type), int(fmt)
+        self._dims = tuple(int(x) for x in _dims)
+
+    def get_nd(self, n_dims_requested):
+        """Fills data_type, fmt and dims properties.
+
+        Parameters:
+            n_dims_requested: number of dimensions to extract information from.
+        """
+        data_type = cudnnffi.ffi.new("cudnnDataType_t *")
+        fmt = cudnnffi.ffi.new("cudnnTensorFormat_t *")
+        n_dims = cudnnffi.ffi.new("int *")
+        dims = cudnnffi.ffi.new("int[]", n_dims_requested)
+        err = self._lib.cudnnGetFilterNdDescriptor(
+            self.handle, n_dims_requested, data_type, fmt, n_dims, dims)
+        if err:
+            raise CU.error("cudnnGetFilterNdDescriptor", err)
+        self._data_type, self._fmt = int(data_type[0]), int(fmt[0])
+        self._dims = tuple(int(x) for x in dims)
 
 
 class ConvolutionDescriptor(Descriptor):
@@ -302,6 +495,16 @@ class RNNDescriptor(Descriptor):
         """Math precision.
         """
         return self._data_type
+
+    @property
+    def num_linear_layers(self):
+        """Number of linear layers in RNN cell.
+        """
+        return {
+            CUDNN_RNN_RELU: 2,
+            CUDNN_RNN_TANH: 2,
+            CUDNN_LSTM: 8,
+            CUDNN_GRU: 6}.get(self.mode, 0)
 
     def _create(self):
         handle = cudnnffi.ffi.new("cudnnRNNDescriptor_t *")
@@ -782,6 +985,8 @@ class CUDNN(object):
     def get_rnn_params_size(self, rnn_desc, xdescs):
         """Gets the amount of parameter space required to execute the RNN.
 
+        Weights and biases will be stored here.
+
         Parameters:
             rnn_desc: RNNDescriptor instance.
             xdescs: iterable of the descriptors of the input
@@ -793,6 +998,20 @@ class CUDNN(object):
         if err:
             raise CU.error("cudnnGetRNNParamsSize", err)
         return int(size[0])
+
+    def get_rnn_lin_layer_matrix_params(self, rnn_desc, layer, xdescs,
+                                        wdesc, w, lin_layer_id,
+                                        lin_layer_mat_desc):
+        """Get a pointer and descriptor for the matrix parameters.
+        """
+        lin_layer_mat = cudnnffi.ffi.new("intptr_t *")
+        err = self._lib.cudnnGetRNNLinLayerMatrixParams(
+            self.handle, rnn_desc, layer, rnn_desc._xdescs_to_cffi(xdescs),
+            wdesc, w, lin_layer_id, lin_layer_mat_desc, lin_layer_mat)
+        if err:
+            raise CU.error("cudnnGetRNNLinLayerMatrixParams", err)
+        # TODO(a.kazantsev): compute the size of the returned memory pointer.
+        return MemPtr(self.context, lin_layer_mat[0], w)
 
     def _release(self):
         if self._lib is not None and self.handle is not None:

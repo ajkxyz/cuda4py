@@ -422,6 +422,37 @@ class Memory(CU):
         self.context._del_ref(self)
 
 
+class MemPtr(Memory):
+    """Provides memory functions over arbitrary address.
+
+    Attributes:
+        owner: holds the reference to the parent object
+               for correct destructor call order.
+    """
+    def __init__(self, context, ptr, owner=None, size=0):
+        """Associates pointer to memory object.
+
+        Parameters:
+            context: the device context.
+            ptr: pointer to the GPU memory.
+            owner: optional owner to hold the reference.
+            size: optional size of the memory region.
+        """
+        super(MemPtr, self).__init__(context, size)
+        self._handle = int(ptr)
+        self.owner = owner
+
+    def _device_alloc(self):
+        """Does nothing by design.
+        """
+        pass
+
+    def _release_mem(self):
+        """Does nothing by design.
+        """
+        pass
+
+
 class MemAlloc(Memory):
     """Allocates memory via cuMemAlloc.
 
