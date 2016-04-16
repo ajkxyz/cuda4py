@@ -181,14 +181,14 @@ class Test(unittest.TestCase):
         d.set_nd(cudnn.CUDNN_DATA_FLOAT, (1, 2, 3))
         self.assertEqual(d.data_type, cudnn.CUDNN_DATA_FLOAT)
         self.assertEqual(d.dims, (1, 2, 3))
-        self.assertEqual(d.strides, (2, 1, 1))
+        self.assertEqual(d.strides, (1, 1, 2))
         d._data_type = -1
         d._fmt = -1
         d._dims = tuple()
         d.get_nd(3)
         self.assertEqual(d.data_type, cudnn.CUDNN_DATA_FLOAT)
         self.assertEqual(d.dims, (1, 2, 3))
-        self.assertEqual(d.strides, (2, 1, 1))
+        self.assertEqual(d.strides, (1, 1, 2))
 
         logging.debug("EXIT: test_tensor_descriptor")
 
@@ -691,13 +691,14 @@ class Test(unittest.TestCase):
         self.assertEqual(rnn.data_type, -1)
         self.assertEqual(rnn.num_linear_layers, 0)
 
-        x = numpy.zeros((5, 1, 1, 64), dtype=numpy.float32)
+        x = numpy.zeros((5, 32), dtype=numpy.float32)  # minibatch, input size
         numpy.random.seed(1234)
         x[:] = numpy.random.rand(x.size).reshape(x.shape) - 0.5
         x_desc = cudnn.TensorDescriptor()
-        x_desc.set_4d(cudnn.CUDNN_TENSOR_NCHW, cudnn.CUDNN_DATA_FLOAT,
-                      *x.shape)
-        n_unroll = 32
+        # Set input as 3-dimensional like in cudnn example.
+        x_desc.set_nd(cudnn.CUDNN_DATA_FLOAT, (x.shape[1], x.shape[0], 1))
+        n_unroll = 16
+        hidden_size = 64
 
         try:
             self.cudnn.get_rnn_workspace_size(
@@ -707,7 +708,7 @@ class Test(unittest.TestCase):
             pass
 
         def assert_values():
-            self.assertEqual(rnn.hidden_size, 64)
+            self.assertEqual(rnn.hidden_size, hidden_size)
             self.assertEqual(rnn.seq_length, n_unroll)
             self.assertEqual(rnn.num_layers, 3)
             self.assertIs(rnn.dropout_desc, drop)
@@ -718,18 +719,19 @@ class Test(unittest.TestCase):
             self.assertEqual(rnn.num_linear_layers, 8)
 
         # Short syntax
-        rnn.set(64, n_unroll, 3, drop)
+        rnn.set(hidden_size, n_unroll, 3, drop)
         assert_values()
         # Check num_linear_layers property
         for mode, n in ((cudnn.CUDNN_RNN_RELU, 2), (cudnn.CUDNN_RNN_TANH, 2),
                         (cudnn.CUDNN_GRU, 6)):
             rnn = cudnn.RNNDescriptor()
-            rnn.set(64, n_unroll, 3, drop, mode=mode)
+            rnn.set(hidden_size, n_unroll, 3, drop, mode=mode)
             self.assertEqual(rnn.num_linear_layers, n)
 
         # Full syntax
         rnn = cudnn.RNNDescriptor()
-        rnn.set(64, n_unroll, 3, drop, input_mode=cudnn.CUDNN_LINEAR_INPUT,
+        rnn.set(hidden_size, n_unroll, 3, drop,
+                input_mode=cudnn.CUDNN_LINEAR_INPUT,
                 direction=cudnn.CUDNN_UNIDIRECTIONAL,
                 mode=cudnn.CUDNN_LSTM, data_type=cudnn.CUDNN_DATA_FLOAT)
         assert_values()
@@ -762,17 +764,23 @@ class Test(unittest.TestCase):
                       x.shape, n_unroll, sz_params)
 
         params_desc = cudnn.FilterDescriptor()
-        params_desc.set_4d(cudnn.CUDNN_DATA_FLOAT, 1, 1, 1, sz_params)
+        params_desc.set_nd(cudnn.CUDNN_DATA_FLOAT, (sz_params >> 2, 1, 1))
         params = cu.MemAlloc(self.ctx, sz_params)
         w_desc = cudnn.FilterDescriptor()
         w = self.cudnn.get_rnn_lin_layer_matrix_params(
             rnn, 0, (x_desc for _i in range(n_unroll)),
             params_desc, params, 0, w_desc)
-        w_desc.get_4d()
-        logging.debug("Got matrix 0 of dimensions: %d %d %d %d, fmt=%d",
-                      w_desc.k, w_desc.c, w_desc.h, w_desc.w, w_desc.fmt)
+        logging.debug("Got matrix 0 of dimensions: %s, fmt=%d, sz=%d",
+                      w_desc.dims, w_desc.fmt, w.size)
+        self.assertEqual(w.size, hidden_size * x.shape[1] * 4)
 
-        # TODO(a.kazantsev): change "_4d" to "_nd" as required for RNN.
+        b_desc = cudnn.FilterDescriptor()
+        b = self.cudnn.get_rnn_lin_layer_bias_params(
+            rnn, 0, (x_desc for _i in range(n_unroll)),
+            params_desc, params, 0, b_desc)
+        logging.debug("Got bias 0 of dimensions: %s, fmt=%d, sz=%d",
+                      b_desc.dims, b_desc.fmt, b.size)
+        self.assertEqual(b.size, hidden_size * 4)
 
         # TODO(a.kazantsev): add test.
 

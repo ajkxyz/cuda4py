@@ -40,7 +40,8 @@ import cuda4py._impl.cudnn._cffi as cudnnffi
 from cuda4py._impl.cudnn._cffi import (
     CUDNN_TENSOR_NCHW, CUDNN_CROSS_CORRELATION, CUDNN_POOLING_MAX,
     CUDNN_NOT_PROPAGATE_NAN, CUDNN_LINEAR_INPUT, CUDNN_UNIDIRECTIONAL,
-    CUDNN_RNN_RELU, CUDNN_RNN_TANH, CUDNN_LSTM, CUDNN_GRU, CUDNN_DATA_FLOAT,
+    CUDNN_RNN_RELU, CUDNN_RNN_TANH, CUDNN_LSTM, CUDNN_GRU,
+    CUDNN_DATA_FLOAT, CUDNN_DATA_DOUBLE, CUDNN_DATA_HALF,
     CUDNN_CONVOLUTION_FWD_PREFER_FASTEST,
     CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST,
     CUDNN_CONVOLUTION_BWD_FILTER_SPECIFY_WORKSPACE_LIMIT,
@@ -215,7 +216,7 @@ class TensorDescriptor(DataDescriptor):
         if strides is None:
             sz = 1
             for i, n in enumerate(dims):
-                _strides[len(dims) - 1 - i] = sz
+                _strides[i] = sz
                 sz *= n
         else:
             _strides[0:len(dims)] = strides
@@ -1002,7 +1003,7 @@ class CUDNN(object):
     def get_rnn_lin_layer_matrix_params(self, rnn_desc, layer, xdescs,
                                         wdesc, w, lin_layer_id,
                                         lin_layer_mat_desc):
-        """Get a pointer and descriptor for the matrix parameters.
+        """Get a pointer and descriptor for the specified matrix parameter.
         """
         lin_layer_mat = cudnnffi.ffi.new("intptr_t *")
         err = self._lib.cudnnGetRNNLinLayerMatrixParams(
@@ -1010,8 +1011,36 @@ class CUDNN(object):
             wdesc, w, lin_layer_id, lin_layer_mat_desc, lin_layer_mat)
         if err:
             raise CU.error("cudnnGetRNNLinLayerMatrixParams", err)
-        # TODO(a.kazantsev): compute the size of the returned memory pointer.
-        return MemPtr(self.context, lin_layer_mat[0], w)
+        sz = 0
+        if isinstance(lin_layer_mat_desc, FilterDescriptor):
+            lin_layer_mat_desc.get_nd(3)
+            item_size = {CUDNN_DATA_FLOAT: 4, CUDNN_DATA_DOUBLE: 8,
+                         CUDNN_DATA_HALF: 2}.get(
+                lin_layer_mat_desc.data_type, 0)
+            sz = (lin_layer_mat_desc.dims[0] * lin_layer_mat_desc.dims[1] *
+                  lin_layer_mat_desc.dims[2] * item_size)
+        return MemPtr(self.context, lin_layer_mat[0], w, sz)
+
+    def get_rnn_lin_layer_bias_params(self, rnn_desc, layer, xdescs,
+                                      wdesc, w, lin_layer_id,
+                                      lin_layer_bias_desc):
+        """Get a pointer and descriptor for the specified bias parameter.
+        """
+        lin_layer_bias = cudnnffi.ffi.new("intptr_t *")
+        err = self._lib.cudnnGetRNNLinLayerBiasParams(
+            self.handle, rnn_desc, layer, rnn_desc._xdescs_to_cffi(xdescs),
+            wdesc, w, lin_layer_id, lin_layer_bias_desc, lin_layer_bias)
+        if err:
+            raise CU.error("cudnnGetRNNLinLayerBiasParams", err)
+        sz = 0
+        if isinstance(lin_layer_bias_desc, FilterDescriptor):
+            lin_layer_bias_desc.get_nd(3)
+            item_size = {CUDNN_DATA_FLOAT: 4, CUDNN_DATA_DOUBLE: 8,
+                         CUDNN_DATA_HALF: 2}.get(
+                lin_layer_bias_desc.data_type, 0)
+            sz = (lin_layer_bias_desc.dims[0] * lin_layer_bias_desc.dims[1] *
+                  lin_layer_bias_desc.dims[2] * item_size)
+        return MemPtr(self.context, lin_layer_bias[0], w, sz)
 
     def _release(self):
         if self._lib is not None and self.handle is not None:
