@@ -589,6 +589,27 @@ def _initialize(backends):
         intptr_t cy,
         intptr_t workspace,
         size_t workSpaceSizeInBytes);
+    cudnnStatus_t cudnnRNNForwardTraining(
+        cudnnHandle_t handle,
+        const cudnnRNNDescriptor_t rnnDesc,
+        const cudnnTensorDescriptor_t *xDesc,
+        const intptr_t x,
+        const cudnnTensorDescriptor_t hxDesc,
+        const intptr_t hx,
+        const cudnnTensorDescriptor_t cxDesc,
+        const intptr_t cx,
+        const cudnnFilterDescriptor_t wDesc,
+        const intptr_t w,
+        const cudnnTensorDescriptor_t *yDesc,
+        intptr_t y,
+        const cudnnTensorDescriptor_t hyDesc,
+        intptr_t hy,
+        const cudnnTensorDescriptor_t cyDesc,
+        intptr_t cy,
+        intptr_t workspace,
+        size_t workSpaceSizeInBytes,
+        intptr_t reserveSpace,
+        size_t reserveSpaceSizeInBytes);
     """
 
     # Parse

@@ -1103,6 +1103,45 @@ class CUDNN(object):
         if err:
             raise CU.error("cudnnRNNForwardInference", err)
 
+    def rnn_forward_training(self, rnn_desc, xdescs, x, hx_desc, hx,
+                             cx_desc, cx, wdesc, w, ydescs, y, hy_desc, hy,
+                             cy_desc, cy, workspace, workspace_size,
+                             reserve_space, reserve_space_size):
+        """Does forward inference for RNN training.
+
+        Parameters:
+            rnn_desc: RNNDescriptor instance.
+            xdescs: iterable of the descriptors of the input
+                    for each unroll step.
+            x: single array with inputs for all unrolls.
+            hx_desc: descriptor for the hidden states.
+            hx: initial hidden states (can be None).
+            cx_desc: descriptor for memory cells.
+            cx: initial memory cells (can be None).
+            wdesc: descriptor for weights & bias storage space.
+            w: weights & bias storage space.
+            ydescs: iterable of the descriptors of the output
+                    for each unroll step.
+            y: single array with outputs for all unrolls.
+            hy_desc: descriptor for the final hidden states.
+            hy: final hidden states (can be None).
+            cy_desc: descriptor for the final memory cells.
+            cy: final memory cells (can be None).
+            workspace: workspace with size >= get_rnn_workspace_size().
+            workspace_size: workspace size in bytes.
+            reserve_space: additional space for RNN training
+                           with size >= get_rnn_training_reserve_size().
+            reserve_space_size: size in bytes of reserve_space.
+        """
+        err = self._lib.cudnnRNNForwardTraining(
+            self.handle, rnn_desc, rnn_desc._descs_to_cffi(xdescs), x,
+            hx_desc, 0 if hx is None else hx, cx_desc, 0 if cx is None else cx,
+            wdesc, w, rnn_desc._descs_to_cffi(ydescs), y,
+            hy_desc, 0 if hy is None else hy, cy_desc, 0 if cy is None else cy,
+            workspace, workspace_size, reserve_space, reserve_space_size)
+        if err:
+            raise CU.error("cudnnRNNForwardTraining", err)
+
     def _release(self):
         if self._lib is not None and self.handle is not None:
             self._lib.cudnnDestroy(self.handle)

@@ -821,7 +821,17 @@ class Test(unittest.TestCase):
         logging.debug("Forward inference done in %.6f sec",
                       (time.time() - t0) / 4)
 
-        # TODO(a.kazantsev): add training test.
+        train_space = cu.MemAlloc(self.ctx, sz_train)
+        self.cudnn.rnn_forward_training(
+            rnn, (x_desc for _i in range(n_unroll)), x_buf,
+            h_desc, hx_buf, h_desc, cx_buf, params_desc, params,
+            (y_desc for _i in range(n_unroll)), y_buf,
+            h_desc, hy_buf, h_desc, cy_buf, workspace, sz_work,
+            train_space, sz_train)
+        self.ctx.synchronize()
+        logging.debug("Forward training done")
+
+        # TODO(a.kazantsev): add backward test.
 
         logging.debug("EXIT: test_rnn")
 
