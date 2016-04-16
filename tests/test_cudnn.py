@@ -831,7 +831,39 @@ class Test(unittest.TestCase):
         self.ctx.synchronize()
         logging.debug("Forward training done")
 
-        # TODO(a.kazantsev): add backward test.
+        dy_buf = cu.MemAlloc(
+            self.ctx, 4 * hidden_size * batch_size * n_unroll)
+        dy_buf.from_device_async(y_buf)
+        dhy_buf = cu.MemAlloc(
+            self.ctx, 4 * hidden_size * batch_size * n_layers)
+        dhy_buf.memset32_async()
+        dcy_buf = cu.MemAlloc(
+            self.ctx, 4 * hidden_size * batch_size * n_layers)
+        dcy_buf.memset32_async()
+        dx_buf = cu.MemAlloc(self.ctx, x_buf.size)
+        dhx_buf = cu.MemAlloc(
+            self.ctx, 4 * hidden_size * batch_size * n_layers)
+        dcx_buf = cu.MemAlloc(
+            self.ctx, 4 * hidden_size * batch_size * n_layers)
+        self.ctx.synchronize()
+        logging.debug("Starting backpropagation")
+        for i in range(5):
+            self.cudnn.rnn_backward_data(
+                rnn, (y_desc for _i in range(n_unroll)), y_buf,
+                (y_desc for _i in range(n_unroll)), dy_buf,
+                h_desc, dhy_buf, h_desc, dcy_buf, params_desc, params,
+                h_desc, hx_buf, h_desc, cx_buf,
+                (x_desc for _i in range(n_unroll)), dx_buf,
+                h_desc, dhx_buf, h_desc, dcx_buf,
+                workspace, sz_work, train_space, sz_train)
+            if i == 0:
+                self.ctx.synchronize()
+                t0 = time.time()
+        self.ctx.synchronize()
+        logging.debug("Backpropagation done in %.6f sec",
+                      (time.time() - t0) / 4)
+
+        # TODO(a.kazantsev): add backward weights test.
 
         logging.debug("EXIT: test_rnn")
 

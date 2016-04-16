@@ -1078,9 +1078,9 @@ class CUDNN(object):
             xdescs: iterable of the descriptors of the input
                     for each unroll step.
             x: single array with inputs for all unrolls.
-            hx_desc: descriptor for the hidden states.
+            hx_desc: descriptor for initial hidden states.
             hx: initial hidden states (can be None).
-            cx_desc: descriptor for memory cells.
+            cx_desc: descriptor for initial memory cells.
             cx: initial memory cells (can be None).
             wdesc: descriptor for weights & bias storage space.
             w: weights & bias storage space.
@@ -1114,9 +1114,9 @@ class CUDNN(object):
             xdescs: iterable of the descriptors of the input
                     for each unroll step.
             x: single array with inputs for all unrolls.
-            hx_desc: descriptor for the hidden states.
+            hx_desc: descriptor for initial hidden states.
             hx: initial hidden states (can be None).
-            cx_desc: descriptor for memory cells.
+            cx_desc: descriptor for initial memory cells.
             cx: initial memory cells (can be None).
             wdesc: descriptor for weights & bias storage space.
             w: weights & bias storage space.
@@ -1141,6 +1141,56 @@ class CUDNN(object):
             workspace, workspace_size, reserve_space, reserve_space_size)
         if err:
             raise CU.error("cudnnRNNForwardTraining", err)
+
+    def rnn_backward_data(self, rnn_desc, y_descs, y, dy_descs, dy,
+                          dhy_desc, dhy, dcy_desc, dcy, wdesc, w,
+                          hx_desc, hx, cx_desc, cx, dx_descs, dx,
+                          dhx_desc, dhx, dcx_desc, dcx,
+                          workspace, workspace_size,
+                          reserve_space, reserve_space_size):
+        """Backpropagates the error through RNN.
+
+        Parameters:
+            rnn_desc: RNNDescriptor instance.
+            y_descs: descriptors of outputs for all unroll steps.
+            y: single array with outputs for all unroll steps.
+            dy_descs: descriptors of output gradients for all unroll steps.
+            dy: single array with output gradients for all unroll steps.
+            dhy_desc: descriptor for gradients at the final hidden state.
+            dhy: gradients at the final hidden state (can be None).
+            dcy_desc: descriptor for gradients at the final memory cell.
+            dcy: gradients at the final memory cell (can be None).
+            wdesc: descriptor for weights & bias storage space.
+            w: weights & bias storage space.
+            hx_desc: descriptor for initial hidden states.
+            hx: initial hidden states (can be None).
+            cx_desc: descriptor for initial memory cells.
+            cx: initial memory cells (can be None).
+            dx_descs: descriptors for input gradients at each unroll step.
+            dx: single array for input gradients at each unroll step.
+            dhx_desc: descriptor for gradient at the initial hidden states.
+            dhx: gradient at the initial hidden states (can be None).
+            dcx_desc: descriptor for gradient at the initial memory cells.
+            dcx: gradient at the initial memory cells (can be None).
+            workspace: workspace with size >= get_rnn_workspace_size().
+            workspace_size: workspace size in bytes.
+            reserve_space: additional space for RNN training
+                           with size >= get_rnn_training_reserve_size().
+            reserve_space_size: size in bytes of reserve_space.
+        """
+        err = self._lib.cudnnRNNBackwardData(
+            self.handle, rnn_desc, rnn_desc._descs_to_cffi(y_descs), y,
+            rnn_desc._descs_to_cffi(dy_descs), dy,
+            dhy_desc, 0 if dhy is None else dhy,
+            dcy_desc, 0 if dcy is None else dcy, wdesc, w,
+            hx_desc, 0 if hx is None else hx,
+            cx_desc, 0 if cx is None else cx,
+            rnn_desc._descs_to_cffi(dx_descs), dx,
+            dhx_desc, 0 if dhx is None else dhx,
+            dcx_desc, 0 if dcx is None else dcx,
+            workspace, workspace_size, reserve_space, reserve_space_size)
+        if err:
+            raise CU.error("cudnnRNNBackwardData", err)
 
     def _release(self):
         if self._lib is not None and self.handle is not None:
