@@ -863,7 +863,19 @@ class Test(unittest.TestCase):
         logging.debug("Backpropagation done in %.6f sec",
                       (time.time() - t0) / 4)
 
-        # TODO(a.kazantsev): add backward weights test.
+        dw = cu.MemAlloc(self.ctx, params.size)
+        logging.debug("Starting gradient computation")
+        for i in range(5):
+            self.cudnn.rnn_backward_weights(
+                rnn, (x_desc for _i in range(n_unroll)), x_buf,
+                h_desc, hx_buf, (y_desc for _i in range(n_unroll)), y_buf,
+                workspace, sz_work, params_desc, dw, train_space, sz_train)
+            if i == 0:
+                self.ctx.synchronize()
+                t0 = time.time()
+        self.ctx.synchronize()
+        logging.debug("Gradient computation done in %.6f sec",
+                      (time.time() - t0) / 4)
 
         logging.debug("EXIT: test_rnn")
 

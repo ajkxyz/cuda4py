@@ -1192,6 +1192,37 @@ class CUDNN(object):
         if err:
             raise CU.error("cudnnRNNBackwardData", err)
 
+    def rnn_backward_weights(self, rnn_desc, xdescs, x, hx_desc, hx,
+                             y_descs, y, workspace, workspace_size,
+                             dw_desc, dw, reserve_space, reserve_space_size):
+        """Backpropagates the error through RNN.
+
+        Parameters:
+            rnn_desc: RNNDescriptor instance.
+            xdescs: iterable of the descriptors of the input
+                    for each unroll step.
+            x: single array with inputs for all unrolls.
+            hx_desc: descriptor for initial hidden states.
+            hx: initial hidden states (can be None).
+            y_descs: descriptors of outputs for all unroll steps.
+            y: single array with outputs for all unroll steps.
+            workspace: workspace with size >= get_rnn_workspace_size().
+            workspace_size: workspace size in bytes.
+            dw_desc: descriptor of storage space for weights/biases gradients.
+            dw: storage space for weights/biases gradients.
+            reserve_space: additional space for RNN training
+                           with size >= get_rnn_training_reserve_size().
+            reserve_space_size: size in bytes of reserve_space.
+        """
+        err = self._lib.cudnnRNNBackwardWeights(
+            self.handle, rnn_desc, rnn_desc._descs_to_cffi(xdescs), x,
+            hx_desc, 0 if hx is None else hx,
+            rnn_desc._descs_to_cffi(y_descs), y,
+            workspace, workspace_size, dw_desc, dw,
+            reserve_space, reserve_space_size)
+        if err:
+            raise CU.error("cudnnRNNBackwardWeights", err)
+
     def _release(self):
         if self._lib is not None and self.handle is not None:
             self._lib.cudnnDestroy(self.handle)
