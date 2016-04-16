@@ -546,19 +546,19 @@ class RNNDescriptor(Descriptor):
         self._mode = mode
         self._data_type = data_type
 
-    def _xdescs_to_cffi(self, xdescs):
-        """Converts iterable of input descriptors to cffi array.
+    def _descs_to_cffi(self, descs):
+        """Converts iterable of the descriptors to cffi array.
         """
         if self.seq_length <= 0:
             raise ValueError("rnn_desc.set() should be called beforehand")
-        xdescs = tuple(xdescs)
-        if len(xdescs) != self.seq_length:
+        descs = tuple(descs)
+        if len(descs) != self.seq_length:
             raise ValueError(
                 "Length of xdescs should be equal to the rnn_desc.seq_length")
-        _xdescs = cudnnffi.ffi.new(
+        _descs = cudnnffi.ffi.new(
             "cudnnTensorDescriptor_t[]", self.seq_length)
-        _xdescs[0:self.seq_length] = xdescs
-        return _xdescs
+        _descs[0:self.seq_length] = descs
+        return _descs
 
 
 class CUDNN(object):
@@ -963,7 +963,7 @@ class CUDNN(object):
         """
         size = cudnnffi.ffi.new("size_t *")
         err = self._lib.cudnnGetRNNWorkspaceSize(
-            self.handle, rnn_desc, rnn_desc._xdescs_to_cffi(xdescs), size)
+            self.handle, rnn_desc, rnn_desc._descs_to_cffi(xdescs), size)
         if err:
             raise CU.error("cudnnGetRNNWorkspaceSize", err)
         return int(size[0])
@@ -978,7 +978,7 @@ class CUDNN(object):
         """
         size = cudnnffi.ffi.new("size_t *")
         err = self._lib.cudnnGetRNNTrainingReserveSize(
-            self.handle, rnn_desc, rnn_desc._xdescs_to_cffi(xdescs), size)
+            self.handle, rnn_desc, rnn_desc._descs_to_cffi(xdescs), size)
         if err:
             raise CU.error("cudnnGetRNNTrainingReserveSize", err)
         return int(size[0])
@@ -995,7 +995,7 @@ class CUDNN(object):
         """
         size = cudnnffi.ffi.new("size_t *")
         err = self._lib.cudnnGetRNNParamsSize(
-            self.handle, rnn_desc, rnn_desc._xdescs_to_cffi(xdescs), size)
+            self.handle, rnn_desc, rnn_desc._descs_to_cffi(xdescs), size)
         if err:
             raise CU.error("cudnnGetRNNParamsSize", err)
         return int(size[0])
@@ -1004,10 +1004,23 @@ class CUDNN(object):
                                         wdesc, w, lin_layer_id,
                                         lin_layer_mat_desc):
         """Get a pointer and descriptor for the specified matrix parameter.
+
+        Parameters:
+            rnn_desc: RNNDescriptor instance.
+            layer: layer number to retrieve info from.
+            xdescs: iterable of the descriptors of the input
+                    for each unroll step.
+            wdesc: descriptor for weights/bias storage space.
+            w: weights/bias storage space.
+            lin_layer_id: id of the weights matrix.
+            lin_layer_mat_desc: FilterDescriptor to be filled.
+
+        Returns:
+            MemPtr instance pointed to the requested weights matrix.
         """
         lin_layer_mat = cudnnffi.ffi.new("intptr_t *")
         err = self._lib.cudnnGetRNNLinLayerMatrixParams(
-            self.handle, rnn_desc, layer, rnn_desc._xdescs_to_cffi(xdescs),
+            self.handle, rnn_desc, layer, rnn_desc._descs_to_cffi(xdescs),
             wdesc, w, lin_layer_id, lin_layer_mat_desc, lin_layer_mat)
         if err:
             raise CU.error("cudnnGetRNNLinLayerMatrixParams", err)
@@ -1025,10 +1038,23 @@ class CUDNN(object):
                                       wdesc, w, lin_layer_id,
                                       lin_layer_bias_desc):
         """Get a pointer and descriptor for the specified bias parameter.
+
+        Parameters:
+            rnn_desc: RNNDescriptor instance.
+            layer: layer number to retrieve info from.
+            xdescs: iterable of the descriptors of the input
+                    for each unroll step.
+            wdesc: descriptor for weights/bias storage space.
+            w: weights/bias storage space.
+            lin_layer_id: id of the bias vector.
+            lin_layer_bias_desc: FilterDescriptor to be filled.
+
+        Returns:
+            MemPtr instance pointed to the requested bias vector.
         """
         lin_layer_bias = cudnnffi.ffi.new("intptr_t *")
         err = self._lib.cudnnGetRNNLinLayerBiasParams(
-            self.handle, rnn_desc, layer, rnn_desc._xdescs_to_cffi(xdescs),
+            self.handle, rnn_desc, layer, rnn_desc._descs_to_cffi(xdescs),
             wdesc, w, lin_layer_id, lin_layer_bias_desc, lin_layer_bias)
         if err:
             raise CU.error("cudnnGetRNNLinLayerBiasParams", err)
@@ -1041,6 +1067,41 @@ class CUDNN(object):
             sz = (lin_layer_bias_desc.dims[0] * lin_layer_bias_desc.dims[1] *
                   lin_layer_bias_desc.dims[2] * item_size)
         return MemPtr(self.context, lin_layer_bias[0], w, sz)
+
+    def rnn_forward_inference(self, rnn_desc, xdescs, x, hx_desc, hx,
+                              cx_desc, cx, wdesc, w, ydescs, y, hy_desc, hy,
+                              cy_desc, cy, workspace, workspace_size):
+        """Does forward inference of RNN up to it's unroll size.
+
+        Parameters:
+            rnn_desc: RNNDescriptor instance.
+            xdescs: iterable of the descriptors of the input
+                    for each unroll step.
+            x: single array with inputs for all unrolls.
+            hx_desc: descriptor for the hidden states.
+            hx: initial hidden states (can be None).
+            cx_desc: descriptor for memory cells.
+            cx: initial memory cells (can be None).
+            wdesc: descriptor for weights & bias storage space.
+            w: weights & bias storage space.
+            ydescs: iterable of the descriptors of the output
+                    for each unroll step.
+            y: single array with outputs for all unrolls.
+            hy_desc: descriptor for the final hidden states.
+            hy: final hidden states (can be None).
+            cy_desc: descriptor for the final memory cells.
+            cy: final memory cells (can be None).
+            workspace: workspace with size >= get_rnn_workspace_size().
+            workspace_size: workspace size in bytes.
+        """
+        err = self._lib.cudnnRNNForwardInference(
+            self.handle, rnn_desc, rnn_desc._descs_to_cffi(xdescs), x,
+            hx_desc, 0 if hx is None else hx, cx_desc, 0 if cx is None else cx,
+            wdesc, w, rnn_desc._descs_to_cffi(ydescs), y,
+            hy_desc, 0 if hy is None else hy, cy_desc, 0 if cy is None else cy,
+            workspace, workspace_size)
+        if err:
+            raise CU.error("cudnnRNNForwardInference", err)
 
     def _release(self):
         if self._lib is not None and self.handle is not None:

@@ -42,6 +42,7 @@ import gc
 import logging
 import numpy
 import os
+import time
 import unittest
 
 
@@ -691,7 +692,9 @@ class Test(unittest.TestCase):
         self.assertEqual(rnn.data_type, -1)
         self.assertEqual(rnn.num_linear_layers, 0)
 
-        x = numpy.zeros((5, 32), dtype=numpy.float32)  # minibatch, input size
+        batch_size = 4
+        x = numpy.zeros((batch_size, 32),  # minibatch, input size
+                        dtype=numpy.float32)
         numpy.random.seed(1234)
         x[:] = numpy.random.rand(x.size).reshape(x.shape) - 0.5
         x_desc = cudnn.TensorDescriptor()
@@ -699,6 +702,7 @@ class Test(unittest.TestCase):
         x_desc.set_nd(cudnn.CUDNN_DATA_FLOAT, (x.shape[1], x.shape[0], 1))
         n_unroll = 16
         hidden_size = 64
+        n_layers = 3
 
         try:
             self.cudnn.get_rnn_workspace_size(
@@ -710,7 +714,7 @@ class Test(unittest.TestCase):
         def assert_values():
             self.assertEqual(rnn.hidden_size, hidden_size)
             self.assertEqual(rnn.seq_length, n_unroll)
-            self.assertEqual(rnn.num_layers, 3)
+            self.assertEqual(rnn.num_layers, n_layers)
             self.assertIs(rnn.dropout_desc, drop)
             self.assertEqual(rnn.input_mode, cudnn.CUDNN_LINEAR_INPUT)
             self.assertEqual(rnn.direction, cudnn.CUDNN_UNIDIRECTIONAL)
@@ -719,18 +723,18 @@ class Test(unittest.TestCase):
             self.assertEqual(rnn.num_linear_layers, 8)
 
         # Short syntax
-        rnn.set(hidden_size, n_unroll, 3, drop)
+        rnn.set(hidden_size, n_unroll, n_layers, drop)
         assert_values()
         # Check num_linear_layers property
         for mode, n in ((cudnn.CUDNN_RNN_RELU, 2), (cudnn.CUDNN_RNN_TANH, 2),
                         (cudnn.CUDNN_GRU, 6)):
             rnn = cudnn.RNNDescriptor()
-            rnn.set(hidden_size, n_unroll, 3, drop, mode=mode)
+            rnn.set(hidden_size, n_unroll, n_layers, drop, mode=mode)
             self.assertEqual(rnn.num_linear_layers, n)
 
         # Full syntax
         rnn = cudnn.RNNDescriptor()
-        rnn.set(hidden_size, n_unroll, 3, drop,
+        rnn.set(hidden_size, n_unroll, n_layers, drop,
                 input_mode=cudnn.CUDNN_LINEAR_INPUT,
                 direction=cudnn.CUDNN_UNIDIRECTIONAL,
                 mode=cudnn.CUDNN_LSTM, data_type=cudnn.CUDNN_DATA_FLOAT)
@@ -766,6 +770,7 @@ class Test(unittest.TestCase):
         params_desc = cudnn.FilterDescriptor()
         params_desc.set_nd(cudnn.CUDNN_DATA_FLOAT, (sz_params >> 2, 1, 1))
         params = cu.MemAlloc(self.ctx, sz_params)
+        params.memset32_async()
         w_desc = cudnn.FilterDescriptor()
         w = self.cudnn.get_rnn_lin_layer_matrix_params(
             rnn, 0, (x_desc for _i in range(n_unroll)),
@@ -782,7 +787,41 @@ class Test(unittest.TestCase):
                       b_desc.dims, b_desc.fmt, b.size)
         self.assertEqual(b.size, hidden_size * 4)
 
-        # TODO(a.kazantsev): add test.
+        workspace = cu.MemAlloc(self.ctx, sz_work)
+        x_buf = cu.MemAlloc(self.ctx, x.nbytes * n_unroll)
+        for i in range(n_unroll):  # will feed the same input
+            x_buf.to_device(x, x.nbytes * i, x.nbytes)
+        y_buf = cu.MemAlloc(self.ctx, 4 * hidden_size * batch_size * n_unroll)
+        hx_buf = cu.MemAlloc(self.ctx, 4 * hidden_size * batch_size * n_layers)
+        hx_buf.memset32_async()
+        hy_buf = cu.MemAlloc(self.ctx, 4 * hidden_size * batch_size * n_layers)
+        cx_buf = cu.MemAlloc(self.ctx, 4 * hidden_size * batch_size * n_layers)
+        cx_buf.memset32_async()
+        cy_buf = cu.MemAlloc(self.ctx, 4 * hidden_size * batch_size * n_layers)
+
+        y_desc = cudnn.TensorDescriptor()
+        y_desc.set_nd(cudnn.CUDNN_DATA_FLOAT, (hidden_size, batch_size, 1))
+
+        h_desc = cudnn.TensorDescriptor()
+        h_desc.set_nd(cudnn.CUDNN_DATA_FLOAT,
+                      (hidden_size, batch_size, n_layers))
+
+        self.ctx.synchronize()
+        logging.debug("Starting forward inference")
+        for i in range(5):
+            self.cudnn.rnn_forward_inference(
+                rnn, (x_desc for _i in range(n_unroll)), x_buf,
+                h_desc, hx_buf, h_desc, cx_buf, params_desc, params,
+                (y_desc for _i in range(n_unroll)), y_buf,
+                h_desc, hy_buf, h_desc, cy_buf, workspace, sz_work)
+            if i == 0:
+                self.ctx.synchronize()
+                t0 = time.time()
+        self.ctx.synchronize()
+        logging.debug("Forward inference done in %.6f sec",
+                      (time.time() - t0) / 4)
+
+        # TODO(a.kazantsev): add training test.
 
         logging.debug("EXIT: test_rnn")
 
