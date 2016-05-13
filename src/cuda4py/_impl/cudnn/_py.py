@@ -577,6 +577,8 @@ class CUDNN(object):
             raise CU.error("cudnnCreate", err)
         self._lib = cudnnffi.lib  # to hold the reference
         self._handle = int(handle[0])
+        self._dropout_desc = None
+        self._dropout_states = None
 
     @property
     def version(self):
@@ -913,6 +915,21 @@ class CUDNN(object):
             0 if states is None else states, states_size, seed)
         if err:
             raise CU.error("cudnnSetDropoutDescriptor", err)
+        # Save the references
+        self._dropout_desc = dropout_desc
+        self._dropout_states = states
+
+    @property
+    def dropout_desc(self):
+        """Returns previously set dropout descriptor or None.
+        """
+        return self._dropout_desc
+
+    @property
+    def dropout_states(self):
+        """Returns previously set dropout states or None.
+        """
+        return self._dropout_states
 
     def dropout_forward(self, dropout_desc, xdesc, x, ydesc, y,
                         reserve_space, reserve_space_size):

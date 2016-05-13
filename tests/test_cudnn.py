@@ -625,9 +625,15 @@ class Test(unittest.TestCase):
                       input_data.shape, drop_rss)
 
         drop = cudnn.DropoutDescriptor()
+        self.assertIsNone(self.cudnn.dropout_desc)
+        self.assertIsNone(self.cudnn.dropout_states)
         self.cudnn.set_dropout_descriptor(drop)  # with default parameters
+        self.assertIs(self.cudnn.dropout_desc, drop)
+        self.assertIsNone(self.cudnn.dropout_states)
         states = cu.MemAlloc(self.ctx, drop_ss)
         self.cudnn.set_dropout_descriptor(drop, 0.5, states, drop_ss, 1234)
+        self.assertIs(self.cudnn.dropout_desc, drop)
+        self.assertIs(self.cudnn.dropout_states, states)
 
         input_buf = cu.MemAlloc(self.ctx, input_data)
         output_buf = cu.MemAlloc(self.ctx, input_buf.size)
