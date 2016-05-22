@@ -107,7 +107,14 @@ from cuda4py._impl.cudnn._cffi import (
     CUDNN_BIDIRECTIONAL,
 
     CUDNN_LINEAR_INPUT,
-    CUDNN_SKIP_INPUT)
+    CUDNN_SKIP_INPUT,
+
+    CUDNN_SOFTMAX_FAST,
+    CUDNN_SOFTMAX_ACCURATE,
+    CUDNN_SOFTMAX_LOG,
+
+    CUDNN_SOFTMAX_MODE_INSTANCE,
+    CUDNN_SOFTMAX_MODE_CHANNEL)
 
 from cuda4py._impl.cudnn._py import (
     CUDNN,

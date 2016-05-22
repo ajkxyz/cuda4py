@@ -142,6 +142,13 @@ class Test(unittest.TestCase):
         self.assertEqual(cudnn.CUDNN_LINEAR_INPUT, 0)
         self.assertEqual(cudnn.CUDNN_SKIP_INPUT, 1)
 
+        self.assertEqual(cudnn.CUDNN_SOFTMAX_FAST, 0)
+        self.assertEqual(cudnn.CUDNN_SOFTMAX_ACCURATE, 1)
+        self.assertEqual(cudnn.CUDNN_SOFTMAX_LOG, 2)
+
+        self.assertEqual(cudnn.CUDNN_SOFTMAX_MODE_INSTANCE, 0)
+        self.assertEqual(cudnn.CUDNN_SOFTMAX_MODE_CHANNEL, 1)
+
     def test_errors(self):
         idx = cu.CU.ERRORS[cudnn.CUDNN_STATUS_NOT_INITIALIZED].find(" | ")
         self.assertGreater(idx, 0)
@@ -884,6 +891,51 @@ class Test(unittest.TestCase):
                       (time.time() - t0) / 4)
 
         logging.debug("EXIT: test_rnn")
+
+    def test_softmax(self):
+        logging.debug("ENTER: test_softmax")
+
+        x_arr = numpy.zeros((7, 37, 1, 1), dtype=numpy.float32)
+        x_arr[:] = numpy.random.rand(x_arr.size).reshape(x_arr.shape)
+
+        y_gold = x_arr.copy().reshape(x_arr.shape[0],
+                                      x_arr.size // x_arr.shape[0])
+        y_gold[:] = (y_gold.transpose() - y_gold.max(axis=1)).transpose()
+        numpy.exp(y_gold, y_gold)
+        y_gold[:] = (y_gold.transpose() / y_gold.sum(axis=1)).transpose()
+
+        x_desc = cudnn.TensorDescriptor()
+        x_desc.set_4d(cudnn.CUDNN_TENSOR_NCHW, cudnn.CUDNN_DATA_FLOAT,
+                      *x_arr.shape)
+        x = cu.MemAlloc(self.ctx, x_arr)
+        y_arr = numpy.zeros_like(x_arr)
+        y = cu.MemAlloc(self.ctx, y_arr)
+
+        np_one = numpy.ones(1, dtype=numpy.float32)
+        np_zero = numpy.zeros(1, dtype=numpy.float32)
+
+        self.cudnn.softmax_forward(np_one, x_desc, x, np_zero, x_desc, y)
+        y.to_host(y_arr)
+
+        max_diff = numpy.fabs(y_arr.ravel() - y_gold.ravel()).max()
+        self.assertLess(max_diff, 1.0e-5)
+
+        # Backpropagtion test
+        dy_arr = numpy.zeros_like(y_gold)
+        dy_arr[:] = numpy.random.rand(dy_arr.size).reshape(dy_arr.shape) + 0.01
+        dy = cu.MemAlloc(self.ctx, dy_arr)
+
+        dx_arr = numpy.zeros_like(dy_arr)
+        dx = cu.MemAlloc(self.ctx, dx_arr)
+
+        self.cudnn.softmax_backward(np_one, x_desc, y, x_desc, dy,
+                                    np_zero, x_desc, dx)
+        dx.to_host(dx_arr)
+        self.assertEqual(numpy.count_nonzero(dx_arr), dx_arr.size)
+
+        # TODO(a.kazantsev): add test for gradient correctness.
+
+        logging.debug("EXIT: test_softmax")
 
 
 if __name__ == "__main__":

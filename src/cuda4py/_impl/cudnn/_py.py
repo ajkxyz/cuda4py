@@ -48,7 +48,8 @@ from cuda4py._impl.cudnn._cffi import (
     CUDNN_CONVOLUTION_BWD_FILTER_NO_WORKSPACE,
     CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST,
     CUDNN_CONVOLUTION_BWD_DATA_SPECIFY_WORKSPACE_LIMIT,
-    CUDNN_CONVOLUTION_BWD_DATA_NO_WORKSPACE)
+    CUDNN_CONVOLUTION_BWD_DATA_NO_WORKSPACE,
+    CUDNN_SOFTMAX_ACCURATE, CUDNN_SOFTMAX_MODE_INSTANCE)
 from cuda4py._py import CU, MemPtr
 
 
@@ -1239,6 +1240,55 @@ class CUDNN(object):
             reserve_space, reserve_space_size)
         if err:
             raise CU.error("cudnnRNNBackwardWeights", err)
+
+    def softmax_forward(self, alpha, x_desc, x, beta, y_desc, y,
+                        algo=CUDNN_SOFTMAX_ACCURATE,
+                        mode=CUDNN_SOFTMAX_MODE_INSTANCE):
+        """Computes Softmax.
+
+        y = beta * y + alpha * softmax(x).
+
+        Parameters:
+            alpha: numpy array with single value.
+            x_desc: descriptor for an input.
+            x: input.
+            beta: numpy array with single value.
+            y_desc: descriptor for an output.
+            y: output.
+            algo: algorithm for the Softmax computation.
+            mode: on what input channels to apply the Softmax.
+        """
+        err = self._lib.cudnnSoftmaxForward(
+            self.handle, algo, mode, CU.extract_ptr(alpha),
+            x_desc, x, CU.extract_ptr(beta), y_desc, y)
+        if err:
+            raise CU.error("cudnnSoftmaxForward", err)
+
+    def softmax_backward(self, alpha, y_desc, y, dy_desc, dy,
+                         beta, dx_desc, dx,
+                         algo=CUDNN_SOFTMAX_ACCURATE,
+                         mode=CUDNN_SOFTMAX_MODE_INSTANCE):
+        """Computes gradient for the Softmax.
+
+        dx = beta * dx + alpha * GradSoftmax(dy).
+
+        Parameters:
+            alpha: numpy array with single value.
+            y_desc: descriptor for an output.
+            y: output with the computed Softmax.
+            dy_desc: descriptor for an error to backpropagate.
+            dy: error to backpropagate.
+            beta: numpy array with single value.
+            dx_desc: descriptor for a backpropagated error.
+            dx: backpropagated error.
+            algo: algorithm for the Softmax computation.
+            mode: on what input channels to apply the Softmax.
+        """
+        err = self._lib.cudnnSoftmaxBackward(
+            self.handle, algo, mode, CU.extract_ptr(alpha),
+            y_desc, y, dy_desc, dy, CU.extract_ptr(beta), dx_desc, dx)
+        if err:
+            raise CU.error("cudnnSoftmaxBackward", err)
 
     def _release(self):
         if self._lib is not None and self.handle is not None:

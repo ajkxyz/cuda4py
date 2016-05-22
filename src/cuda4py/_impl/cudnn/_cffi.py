@@ -164,6 +164,17 @@ CUDNN_LINEAR_INPUT = 0
 CUDNN_SKIP_INPUT = 1
 
 
+#: cudnnSoftmaxAlgorithm_t
+CUDNN_SOFTMAX_FAST = 0  # does NOT max to avoid overflow
+CUDNN_SOFTMAX_ACCURATE = 1  # subtracts max to avoid overflow
+CUDNN_SOFTMAX_LOG = 2
+
+
+#: cudnnSoftmaxMode_t
+CUDNN_SOFTMAX_MODE_INSTANCE = 0  # compute over all C, H, W for each N
+CUDNN_SOFTMAX_MODE_CHANNEL = 1  # compute over all C for each H, W, N
+
+
 #: Cached cudnn version
 cudnn_version = 0
 
@@ -189,6 +200,8 @@ def _initialize(backends):
     typedef int cudnnConvolutionFwdPreference_t;
     typedef int cudnnConvolutionFwdAlgo_t;
     typedef int cudnnPoolingMode_t;
+    typedef int cudnnSoftmaxAlgorithm_t;
+    typedef int cudnnSoftmaxMode_t;
 
     size_t cudnnGetVersion();
 
@@ -327,6 +340,29 @@ def _initialize(backends):
         const intptr_t dy,
         const cudnnTensorDescriptor_t xDesc,
         const intptr_t x,
+        const intptr_t beta,
+        const cudnnTensorDescriptor_t dxDesc,
+        intptr_t dx);
+
+    cudnnStatus_t cudnnSoftmaxForward(
+        cudnnHandle_t handle,
+        cudnnSoftmaxAlgorithm_t algo,
+        cudnnSoftmaxMode_t mode,
+        const intptr_t alpha,
+        const cudnnTensorDescriptor_t xDesc,
+        const intptr_t x,
+        const intptr_t beta,
+        const cudnnTensorDescriptor_t yDesc,
+        intptr_t y);
+    cudnnStatus_t cudnnSoftmaxBackward(
+        cudnnHandle_t handle,
+        cudnnSoftmaxAlgorithm_t algo,
+        cudnnSoftmaxMode_t mode,
+        const intptr_t alpha,
+        const cudnnTensorDescriptor_t yDesc,
+        const intptr_t y,
+        const cudnnTensorDescriptor_t dyDesc,
+        const intptr_t dy,
         const intptr_t beta,
         const cudnnTensorDescriptor_t dxDesc,
         intptr_t dx);
