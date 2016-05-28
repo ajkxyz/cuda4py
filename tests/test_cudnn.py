@@ -186,17 +186,17 @@ class Test(unittest.TestCase):
         self.assertEqual(len(d.dims), 0)
         self.assertEqual(len(d.strides), 0)
 
-        d.set_nd(cudnn.CUDNN_DATA_FLOAT, (1, 2, 3))
+        d.set_nd(cudnn.CUDNN_DATA_FLOAT, (2, 3, 4))
         self.assertEqual(d.data_type, cudnn.CUDNN_DATA_FLOAT)
-        self.assertEqual(d.dims, (1, 2, 3))
-        self.assertEqual(d.strides, (1, 1, 2))
+        self.assertEqual(d.dims, (2, 3, 4))
+        self.assertEqual(d.strides, (12, 4, 1))
         d._data_type = -1
         d._fmt = -1
         d._dims = tuple()
         d.get_nd(3)
         self.assertEqual(d.data_type, cudnn.CUDNN_DATA_FLOAT)
-        self.assertEqual(d.dims, (1, 2, 3))
-        self.assertEqual(d.strides, (1, 1, 2))
+        self.assertEqual(d.dims, (2, 3, 4))
+        self.assertEqual(d.strides, (12, 4, 1))
 
         logging.debug("EXIT: test_tensor_descriptor")
 
@@ -677,8 +677,7 @@ class Test(unittest.TestCase):
             if self.cudnn.version == 5004:
                 self.assertEqual(x, y)  # strangely, it doesn't scale gradient
             else:
-                # self.assertEqual(x, y * 2)
-                pass
+                self.assertEqual(x, y * 2)
         self.assertGreater(n_z, (input_data.size >> 1) -
                            (input_data.size >> 5))
 
@@ -696,7 +695,6 @@ class Test(unittest.TestCase):
 
         rnn = cudnn.RNNDescriptor()
         self.assertEqual(rnn.hidden_size, 0)
-        self.assertEqual(rnn.seq_length, 0)
         self.assertEqual(rnn.num_layers, 0)
         self.assertIsNone(rnn.dropout_desc)
         self.assertEqual(rnn.input_mode, -1)
@@ -711,22 +709,15 @@ class Test(unittest.TestCase):
         numpy.random.seed(1234)
         x[:] = numpy.random.rand(x.size).reshape(x.shape) - 0.5
         x_desc = cudnn.TensorDescriptor()
-        # Set input as 3-dimensional like in cudnn example.
-        x_desc.set_nd(cudnn.CUDNN_DATA_FLOAT, (x.shape[1], x.shape[0], 1))
+        # Set input as 3-dimensional like in cudnn example:
+        # minibatch, input_size, 1
+        x_desc.set_nd(cudnn.CUDNN_DATA_FLOAT, (x.shape[0], x.shape[1], 1))
         n_unroll = 16
         hidden_size = 64
         n_layers = 3
 
-        try:
-            self.cudnn.get_rnn_workspace_size(
-                rnn, (x_desc for _i in range(n_unroll)))
-            raise RuntimeError("Control should not reach here")
-        except ValueError:
-            pass
-
         def assert_values():
             self.assertEqual(rnn.hidden_size, hidden_size)
-            self.assertEqual(rnn.seq_length, n_unroll)
             self.assertEqual(rnn.num_layers, n_layers)
             self.assertIs(rnn.dropout_desc, drop)
             self.assertEqual(rnn.input_mode, cudnn.CUDNN_LINEAR_INPUT)
@@ -736,34 +727,24 @@ class Test(unittest.TestCase):
             self.assertEqual(rnn.num_linear_layers, 8)
 
         # Short syntax
-        rnn.set(hidden_size, n_unroll, n_layers, drop)
+        rnn.set(hidden_size, n_layers, drop)
         assert_values()
         # Check num_linear_layers property
         for mode, n in ((cudnn.CUDNN_RNN_RELU, 2), (cudnn.CUDNN_RNN_TANH, 2),
                         (cudnn.CUDNN_GRU, 6)):
             rnn = cudnn.RNNDescriptor()
-            rnn.set(hidden_size, n_unroll, n_layers, drop, mode=mode)
+            rnn.set(hidden_size, n_layers, drop, mode=mode)
             self.assertEqual(rnn.num_linear_layers, n)
 
         # Full syntax
         rnn = cudnn.RNNDescriptor()
-        rnn.set(hidden_size, n_unroll, n_layers, drop,
+        rnn.set(hidden_size, n_layers, drop,
                 input_mode=cudnn.CUDNN_LINEAR_INPUT,
                 direction=cudnn.CUDNN_UNIDIRECTIONAL,
                 mode=cudnn.CUDNN_LSTM, data_type=cudnn.CUDNN_DATA_FLOAT)
         assert_values()
 
         def get_sz(func):
-            try:
-                sz = func(rnn, (x_desc for _i in range(n_unroll - 1)))
-                raise RuntimeError("Control should not reach here")
-            except ValueError:
-                pass
-            try:
-                sz = func(rnn, (x_desc for _i in range(n_unroll + 1)))
-                raise RuntimeError("Control should not reach here")
-            except ValueError:
-                pass
             sz = func(rnn, (x_desc for _i in range(n_unroll)))
             self.assertIsInstance(sz, int)
             return sz
@@ -776,9 +757,13 @@ class Test(unittest.TestCase):
         logging.debug("RNN train size for %s with %d unrolls is %d",
                       x.shape, n_unroll, sz_train)
 
-        sz_params = get_sz(self.cudnn.get_rnn_params_size)
-        logging.debug("RNN params size for %s with %d unrolls is %d",
-                      x.shape, n_unroll, sz_params)
+        sz_params = self.cudnn.get_rnn_params_size(rnn, x_desc)
+        logging.debug("RNN params size for %s is %d", x.shape, sz_params)
+        x_desc2 = cudnn.TensorDescriptor()
+        x_desc2.set_nd(cudnn.CUDNN_DATA_DOUBLE, (x.shape[0], x.shape[1], 1))
+        sz_params2 = self.cudnn.get_rnn_params_size(
+            rnn, x_desc2, cudnn.CUDNN_DATA_DOUBLE)
+        self.assertEqual(sz_params2, sz_params * 2)
 
         params_desc = cudnn.FilterDescriptor()
         params_desc.set_nd(cudnn.CUDNN_DATA_FLOAT, (sz_params >> 2, 1, 1))
@@ -786,16 +771,14 @@ class Test(unittest.TestCase):
         params.memset32_async()
         w_desc = cudnn.FilterDescriptor()
         w = self.cudnn.get_rnn_lin_layer_matrix_params(
-            rnn, 0, (x_desc for _i in range(n_unroll)),
-            params_desc, params, 0, w_desc)
+            rnn, 0, x_desc, params_desc, params, 0, w_desc)
         logging.debug("Got matrix 0 of dimensions: %s, fmt=%d, sz=%d",
                       w_desc.dims, w_desc.fmt, w.size)
         self.assertEqual(w.size, hidden_size * x.shape[1] * 4)
 
         b_desc = cudnn.FilterDescriptor()
         b = self.cudnn.get_rnn_lin_layer_bias_params(
-            rnn, 0, (x_desc for _i in range(n_unroll)),
-            params_desc, params, 0, b_desc)
+            rnn, 0, x_desc, params_desc, params, 0, b_desc)
         logging.debug("Got bias 0 of dimensions: %s, fmt=%d, sz=%d",
                       b_desc.dims, b_desc.fmt, b.size)
         self.assertEqual(b.size, hidden_size * 4)
@@ -813,11 +796,11 @@ class Test(unittest.TestCase):
         cy_buf = cu.MemAlloc(self.ctx, 4 * hidden_size * batch_size * n_layers)
 
         y_desc = cudnn.TensorDescriptor()
-        y_desc.set_nd(cudnn.CUDNN_DATA_FLOAT, (hidden_size, batch_size, 1))
+        y_desc.set_nd(cudnn.CUDNN_DATA_FLOAT, (batch_size, hidden_size, 1))
 
         h_desc = cudnn.TensorDescriptor()
         h_desc.set_nd(cudnn.CUDNN_DATA_FLOAT,
-                      (hidden_size, batch_size, n_layers))
+                      (n_layers, batch_size, hidden_size))
 
         self.ctx.synchronize()
         logging.debug("Starting forward inference")

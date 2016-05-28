@@ -564,7 +564,6 @@ def _initialize(backends):
     cudnnStatus_t cudnnSetRNNDescriptor(
         cudnnRNNDescriptor_t rnnDesc,
         int hiddenSize,
-        int seqLength,
         int numLayers,
         cudnnDropoutDescriptor_t dropoutDesc,
         cudnnRNNInputMode_t inputMode,
@@ -574,23 +573,26 @@ def _initialize(backends):
     cudnnStatus_t cudnnGetRNNWorkspaceSize(
         cudnnHandle_t handle,
         const cudnnRNNDescriptor_t rnnDesc,
+        const int seqLength,
         const cudnnTensorDescriptor_t *xDesc,
         size_t *sizeInBytes);
     cudnnStatus_t cudnnGetRNNTrainingReserveSize(
         cudnnHandle_t handle,
         const cudnnRNNDescriptor_t rnnDesc,
+        const int seqLength,
         const cudnnTensorDescriptor_t *xDesc,
         size_t *sizeInBytes);
     cudnnStatus_t cudnnGetRNNParamsSize(
         cudnnHandle_t handle,
         const cudnnRNNDescriptor_t rnnDesc,
-        const cudnnTensorDescriptor_t *xDesc,
-        size_t *sizeInBytes);
+        const cudnnTensorDescriptor_t xDesc,
+        size_t *sizeInBytes,
+        cudnnDataType_t dataType);
     cudnnStatus_t cudnnGetRNNLinLayerMatrixParams(
         cudnnHandle_t handle,
         const cudnnRNNDescriptor_t rnnDesc,
         const int layer,
-        const cudnnTensorDescriptor_t *xDesc,
+        const cudnnTensorDescriptor_t xDesc,
         const cudnnFilterDescriptor_t wDesc,
         const intptr_t w,
         const int linLayerID,
@@ -600,7 +602,7 @@ def _initialize(backends):
         cudnnHandle_t handle,
         const cudnnRNNDescriptor_t rnnDesc,
         const int layer,
-        const cudnnTensorDescriptor_t *xDesc,
+        const cudnnTensorDescriptor_t xDesc,
         const cudnnFilterDescriptor_t wDesc,
         const intptr_t w,
         const int linLayerID,
@@ -609,6 +611,7 @@ def _initialize(backends):
     cudnnStatus_t cudnnRNNForwardInference(
         cudnnHandle_t handle,
         const cudnnRNNDescriptor_t rnnDesc,
+        const int seqLength,
         const cudnnTensorDescriptor_t *xDesc,
         const intptr_t x,
         const cudnnTensorDescriptor_t hxDesc,
@@ -628,6 +631,7 @@ def _initialize(backends):
     cudnnStatus_t cudnnRNNForwardTraining(
         cudnnHandle_t handle,
         const cudnnRNNDescriptor_t rnnDesc,
+        const int seqLength,
         const cudnnTensorDescriptor_t *xDesc,
         const intptr_t x,
         const cudnnTensorDescriptor_t hxDesc,
@@ -649,6 +653,7 @@ def _initialize(backends):
     cudnnStatus_t cudnnRNNBackwardData(
         cudnnHandle_t handle,
         const cudnnRNNDescriptor_t rnnDesc,
+        const int seqLength,
         const cudnnTensorDescriptor_t *yDesc,
         const intptr_t y,
         const cudnnTensorDescriptor_t *dyDesc,
@@ -676,6 +681,7 @@ def _initialize(backends):
     cudnnStatus_t cudnnRNNBackwardWeights(
         cudnnHandle_t handle,
         const cudnnRNNDescriptor_t rnnDesc,
+        const int seqLength,
         const cudnnTensorDescriptor_t *xDesc,
         const intptr_t x,
         const cudnnTensorDescriptor_t hxDesc,

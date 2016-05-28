@@ -207,7 +207,9 @@ class TensorDescriptor(DataDescriptor):
         Parameters:
             data_type: data type.
             dims: tuple of dimensions.
-            strides: tuple of strides of None to create compact layout.
+            strides: tuple of strides of None to create compact layout,
+                     when None, strides become like in numpy array
+                     with shape dims.
         """
         if strides is not None and len(dims) != len(strides):
             raise ValueError("len(dims) != len(strides)")
@@ -216,9 +218,9 @@ class TensorDescriptor(DataDescriptor):
         _strides = cudnnffi.ffi.new("int[]", len(dims))
         if strides is None:
             sz = 1
-            for i, n in enumerate(dims):
+            for i in range(len(dims) - 1, -1, -1):
                 _strides[i] = sz
-                sz *= n
+                sz *= dims[i]
         else:
             _strides[0:len(dims)] = strides
         err = self._lib.cudnnSetTensorNdDescriptor(
@@ -442,7 +444,6 @@ class RNNDescriptor(Descriptor):
     def __init__(self):
         super(RNNDescriptor, self).__init__()
         self._hidden_size = 0
-        self._seq_length = 0
         self._num_layers = 0
         self._dropout_desc = None
         self._input_mode = -1
@@ -455,12 +456,6 @@ class RNNDescriptor(Descriptor):
         """Size of the internal hidden state for each layer.
         """
         return self._hidden_size
-
-    @property
-    def seq_length(self):
-        """Number of iterations to unroll over.
-        """
-        return self._seq_length
 
     @property
     def num_layers(self):
@@ -518,14 +513,13 @@ class RNNDescriptor(Descriptor):
     def _destroy(self):
         self._lib.cudnnDestroyRNNDescriptor(self.handle)
 
-    def set(self, hidden_size, seq_length, num_layers, dropout_desc,
+    def set(self, hidden_size, num_layers, dropout_desc,
             input_mode=CUDNN_LINEAR_INPUT, direction=CUDNN_UNIDIRECTIONAL,
             mode=CUDNN_LSTM, data_type=CUDNN_DATA_FLOAT):
         """Initializes RNN descriptor.
 
         Parameters:
             hidden_size: size of the internal hidden state for each layer.
-            seq_length: number of iterations to unroll over.
             num_layers: number of layers.
             dropout_desc: DropoutDescriptor instance.
             input_mode: specifies the behavior at the input to the first layer.
@@ -534,12 +528,11 @@ class RNNDescriptor(Descriptor):
             data_type: math precision.
         """
         err = self._lib.cudnnSetRNNDescriptor(
-            self.handle, hidden_size, seq_length, num_layers, dropout_desc,
+            self.handle, hidden_size, num_layers, dropout_desc,
             input_mode, direction, mode, data_type)
         if err:
             raise CU.error("cudnnSetRNNDescriptor", err)
         self._hidden_size = hidden_size
-        self._seq_length = seq_length
         self._num_layers = num_layers
         self._dropout_desc = dropout_desc
         self._input_mode = input_mode
@@ -547,19 +540,32 @@ class RNNDescriptor(Descriptor):
         self._mode = mode
         self._data_type = data_type
 
-    def _descs_to_cffi(self, descs):
+    @staticmethod
+    def _descs_to_cffi(descs):
         """Converts iterable of the descriptors to cffi array.
         """
-        if self.seq_length <= 0:
-            raise ValueError("rnn_desc.set() should be called beforehand")
-        descs = tuple(descs)
-        if len(descs) != self.seq_length:
-            raise ValueError(
-                "Length of xdescs should be equal to the rnn_desc.seq_length")
-        _descs = cudnnffi.ffi.new(
-            "cudnnTensorDescriptor_t[]", self.seq_length)
-        _descs[0:self.seq_length] = descs
-        return _descs
+        return cudnnffi.ffi.new("cudnnTensorDescriptor_t[]", tuple(descs))
+
+    @staticmethod
+    def _get_xydescs(xdescs, ydescs):
+        """Converts xdescs and ydescs to cffi and checks its lengths.
+        """
+        _xdescs = RNNDescriptor._descs_to_cffi(xdescs)
+        _ydescs = RNNDescriptor._descs_to_cffi(ydescs)
+        if len(_xdescs) != len(_ydescs):
+            raise ValueError("Lengths of xdescs and ydescs should be equal")
+        return _xdescs, _ydescs
+
+    @staticmethod
+    def _get_xyzdescs(xdescs, ydescs, zdescs):
+        """Converts xdescs, ydescs and zdescs to cffi and checks its lengths.
+        """
+        _xdescs = RNNDescriptor._descs_to_cffi(xdescs)
+        _ydescs = RNNDescriptor._descs_to_cffi(ydescs)
+        _zdescs = RNNDescriptor._descs_to_cffi(zdescs)
+        if len(_xdescs) != len(_ydescs) or len(_ydescs) != len(_zdescs):
+            raise ValueError("Lengths of descriptor arrays should be equal")
+        return _xdescs, _ydescs, _zdescs
 
 
 class CUDNN(object):
@@ -682,7 +688,7 @@ class CUDNN(object):
             raise CU.error("cudnnConvolutionBackwardBias", err)
 
     def get_convolution_backward_filter_algorithm(
-            self, src_desc, diff_desc, conv_dec, grad_desc,
+            self, src_desc, diff_desc, conv_desc, grad_desc,
             preference=CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST,
             memory_limit=0):
         """Returns backward filter algorithm based on parameters.
@@ -695,7 +701,7 @@ class CUDNN(object):
         """
         algo = cudnnffi.ffi.new("cudnnConvolutionBwdFilterAlgo_t *")
         err = self._lib.cudnnGetConvolutionBackwardFilterAlgorithm(
-            self.handle, src_desc, diff_desc, conv_dec, grad_desc,
+            self.handle, src_desc, diff_desc, conv_desc, grad_desc,
             preference, memory_limit, algo)
         if err:
             raise CU.error("cudnnGetConvolutionBackwardFilterAlgorithm", err)
@@ -937,7 +943,7 @@ class CUDNN(object):
         """Does dropout forward propagation.
 
         Parameters:
-            droput_desc: DropoutDescriptor instance.
+            dropout_desc: DropoutDescriptor instance.
             xdesc: TensorDescriptor for the input.
             x: input.
             ydesc: TensorDescriptor for the output.
@@ -957,7 +963,7 @@ class CUDNN(object):
         """Does dropout backward propagation.
 
         Parameters:
-            droput_desc: DropoutDescriptor instance.
+            dropout_desc: DropoutDescriptor instance.
             dydesc: TensorDescriptor for the error to backpropagate.
             dy: error to backpropagate.
             dxdesc: TensorDescriptor for the backpropagated error.
@@ -980,8 +986,9 @@ class CUDNN(object):
                     for each unroll step.
         """
         size = cudnnffi.ffi.new("size_t *")
+        _xdescs = RNNDescriptor._descs_to_cffi(xdescs)
         err = self._lib.cudnnGetRNNWorkspaceSize(
-            self.handle, rnn_desc, rnn_desc._descs_to_cffi(xdescs), size)
+            self.handle, rnn_desc, len(_xdescs), _xdescs, size)
         if err:
             raise CU.error("cudnnGetRNNWorkspaceSize", err)
         return int(size[0])
@@ -995,30 +1002,32 @@ class CUDNN(object):
                     for each unroll step.
         """
         size = cudnnffi.ffi.new("size_t *")
+        _xdescs = RNNDescriptor._descs_to_cffi(xdescs)
         err = self._lib.cudnnGetRNNTrainingReserveSize(
-            self.handle, rnn_desc, rnn_desc._descs_to_cffi(xdescs), size)
+            self.handle, rnn_desc, len(_xdescs), _xdescs, size)
         if err:
             raise CU.error("cudnnGetRNNTrainingReserveSize", err)
         return int(size[0])
 
-    def get_rnn_params_size(self, rnn_desc, xdescs):
+    def get_rnn_params_size(self, rnn_desc, xdesc, data_type=None):
         """Gets the amount of parameter space required to execute the RNN.
 
         Weights and biases will be stored here.
 
         Parameters:
             rnn_desc: RNNDescriptor instance.
-            xdescs: iterable of the descriptors of the input
-                    for each unroll step.
+            xdesc: descriptor of the input.
+            data_type: data type or None to get it from rnn_desc.
         """
         size = cudnnffi.ffi.new("size_t *")
         err = self._lib.cudnnGetRNNParamsSize(
-            self.handle, rnn_desc, rnn_desc._descs_to_cffi(xdescs), size)
+            self.handle, rnn_desc, xdesc, size,
+            getattr(rnn_desc, "data_type") if data_type is None else data_type)
         if err:
             raise CU.error("cudnnGetRNNParamsSize", err)
         return int(size[0])
 
-    def get_rnn_lin_layer_matrix_params(self, rnn_desc, layer, xdescs,
+    def get_rnn_lin_layer_matrix_params(self, rnn_desc, layer, xdesc,
                                         wdesc, w, lin_layer_id,
                                         lin_layer_mat_desc):
         """Get a pointer and descriptor for the specified matrix parameter.
@@ -1026,8 +1035,7 @@ class CUDNN(object):
         Parameters:
             rnn_desc: RNNDescriptor instance.
             layer: layer number to retrieve info from.
-            xdescs: iterable of the descriptors of the input
-                    for each unroll step.
+            xdesc: descriptors of the input.
             wdesc: descriptor for weights/bias storage space.
             w: weights/bias storage space.
             lin_layer_id: id of the weights matrix.
@@ -1038,7 +1046,7 @@ class CUDNN(object):
         """
         lin_layer_mat = cudnnffi.ffi.new("intptr_t *")
         err = self._lib.cudnnGetRNNLinLayerMatrixParams(
-            self.handle, rnn_desc, layer, rnn_desc._descs_to_cffi(xdescs),
+            self.handle, rnn_desc, layer, xdesc,
             wdesc, w, lin_layer_id, lin_layer_mat_desc, lin_layer_mat)
         if err:
             raise CU.error("cudnnGetRNNLinLayerMatrixParams", err)
@@ -1052,7 +1060,7 @@ class CUDNN(object):
                   lin_layer_mat_desc.dims[2] * item_size)
         return MemPtr(self.context, lin_layer_mat[0], w, sz)
 
-    def get_rnn_lin_layer_bias_params(self, rnn_desc, layer, xdescs,
+    def get_rnn_lin_layer_bias_params(self, rnn_desc, layer, xdesc,
                                       wdesc, w, lin_layer_id,
                                       lin_layer_bias_desc):
         """Get a pointer and descriptor for the specified bias parameter.
@@ -1060,8 +1068,7 @@ class CUDNN(object):
         Parameters:
             rnn_desc: RNNDescriptor instance.
             layer: layer number to retrieve info from.
-            xdescs: iterable of the descriptors of the input
-                    for each unroll step.
+            xdesc: descriptor of the input.
             wdesc: descriptor for weights/bias storage space.
             w: weights/bias storage space.
             lin_layer_id: id of the bias vector.
@@ -1072,7 +1079,7 @@ class CUDNN(object):
         """
         lin_layer_bias = cudnnffi.ffi.new("intptr_t *")
         err = self._lib.cudnnGetRNNLinLayerBiasParams(
-            self.handle, rnn_desc, layer, rnn_desc._descs_to_cffi(xdescs),
+            self.handle, rnn_desc, layer, xdesc,
             wdesc, w, lin_layer_id, lin_layer_bias_desc, lin_layer_bias)
         if err:
             raise CU.error("cudnnGetRNNLinLayerBiasParams", err)
@@ -1112,10 +1119,11 @@ class CUDNN(object):
             workspace: workspace with size >= get_rnn_workspace_size().
             workspace_size: workspace size in bytes.
         """
+        _xdescs, _ydescs = RNNDescriptor._get_xydescs(xdescs, ydescs)
         err = self._lib.cudnnRNNForwardInference(
-            self.handle, rnn_desc, rnn_desc._descs_to_cffi(xdescs), x,
+            self.handle, rnn_desc, len(_xdescs), _xdescs, x,
             hx_desc, 0 if hx is None else hx, cx_desc, 0 if cx is None else cx,
-            wdesc, w, rnn_desc._descs_to_cffi(ydescs), y,
+            wdesc, w, _ydescs, y,
             hy_desc, 0 if hy is None else hy, cy_desc, 0 if cy is None else cy,
             workspace, workspace_size)
         if err:
@@ -1151,16 +1159,17 @@ class CUDNN(object):
                            with size >= get_rnn_training_reserve_size().
             reserve_space_size: size in bytes of reserve_space.
         """
+        _xdescs, _ydescs = RNNDescriptor._get_xydescs(xdescs, ydescs)
         err = self._lib.cudnnRNNForwardTraining(
-            self.handle, rnn_desc, rnn_desc._descs_to_cffi(xdescs), x,
+            self.handle, rnn_desc, len(_xdescs), _xdescs, x,
             hx_desc, 0 if hx is None else hx, cx_desc, 0 if cx is None else cx,
-            wdesc, w, rnn_desc._descs_to_cffi(ydescs), y,
+            wdesc, w, _ydescs, y,
             hy_desc, 0 if hy is None else hy, cy_desc, 0 if cy is None else cy,
             workspace, workspace_size, reserve_space, reserve_space_size)
         if err:
             raise CU.error("cudnnRNNForwardTraining", err)
 
-    def rnn_backward_data(self, rnn_desc, y_descs, y, dy_descs, dy,
+    def rnn_backward_data(self, rnn_desc, ydescs, y, dy_descs, dy,
                           dhy_desc, dhy, dcy_desc, dcy, wdesc, w,
                           hx_desc, hx, cx_desc, cx, dx_descs, dx,
                           dhx_desc, dhx, dcx_desc, dcx,
@@ -1170,7 +1179,7 @@ class CUDNN(object):
 
         Parameters:
             rnn_desc: RNNDescriptor instance.
-            y_descs: descriptors of outputs for all unroll steps.
+            ydescs: descriptors of outputs for all unroll steps.
             y: single array with outputs for all unroll steps.
             dy_descs: descriptors of output gradients for all unroll steps.
             dy: single array with output gradients for all unroll steps.
@@ -1196,22 +1205,22 @@ class CUDNN(object):
                            with size >= get_rnn_training_reserve_size().
             reserve_space_size: size in bytes of reserve_space.
         """
+        _ydescs, _dy_descs, _dx_descs = RNNDescriptor._get_xyzdescs(
+            ydescs, dy_descs, dx_descs)
         err = self._lib.cudnnRNNBackwardData(
-            self.handle, rnn_desc, rnn_desc._descs_to_cffi(y_descs), y,
-            rnn_desc._descs_to_cffi(dy_descs), dy,
-            dhy_desc, 0 if dhy is None else dhy,
+            self.handle, rnn_desc, len(_ydescs), _ydescs, y,
+            _dy_descs, dy, dhy_desc, 0 if dhy is None else dhy,
             dcy_desc, 0 if dcy is None else dcy, wdesc, w,
             hx_desc, 0 if hx is None else hx,
             cx_desc, 0 if cx is None else cx,
-            rnn_desc._descs_to_cffi(dx_descs), dx,
-            dhx_desc, 0 if dhx is None else dhx,
+            _dx_descs, dx, dhx_desc, 0 if dhx is None else dhx,
             dcx_desc, 0 if dcx is None else dcx,
             workspace, workspace_size, reserve_space, reserve_space_size)
         if err:
             raise CU.error("cudnnRNNBackwardData", err)
 
     def rnn_backward_weights(self, rnn_desc, xdescs, x, hx_desc, hx,
-                             y_descs, y, workspace, workspace_size,
+                             ydescs, y, workspace, workspace_size,
                              dw_desc, dw, reserve_space, reserve_space_size):
         """Backpropagates the error through RNN.
 
@@ -1222,7 +1231,7 @@ class CUDNN(object):
             x: single array with inputs for all unrolls.
             hx_desc: descriptor for initial hidden states.
             hx: initial hidden states (can be None).
-            y_descs: descriptors of outputs for all unroll steps.
+            ydescs: descriptors of outputs for all unroll steps.
             y: single array with outputs for all unroll steps.
             workspace: workspace with size >= get_rnn_workspace_size().
             workspace_size: workspace size in bytes.
@@ -1232,12 +1241,11 @@ class CUDNN(object):
                            with size >= get_rnn_training_reserve_size().
             reserve_space_size: size in bytes of reserve_space.
         """
+        _xdescs, _ydescs = RNNDescriptor._get_xydescs(xdescs, ydescs)
         err = self._lib.cudnnRNNBackwardWeights(
-            self.handle, rnn_desc, rnn_desc._descs_to_cffi(xdescs), x,
-            hx_desc, 0 if hx is None else hx,
-            rnn_desc._descs_to_cffi(y_descs), y,
-            workspace, workspace_size, dw_desc, dw,
-            reserve_space, reserve_space_size)
+            self.handle, rnn_desc, len(_xdescs), _xdescs, x,
+            hx_desc, 0 if hx is None else hx, _ydescs, y, workspace,
+            workspace_size, dw_desc, dw, reserve_space, reserve_space_size)
         if err:
             raise CU.error("cudnnRNNBackwardWeights", err)
 

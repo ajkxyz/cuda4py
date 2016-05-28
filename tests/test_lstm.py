@@ -143,7 +143,6 @@ class Test(unittest.TestCase):
 
         rnn = cudnn.RNNDescriptor()
         self.assertEqual(rnn.hidden_size, 0)
-        self.assertEqual(rnn.seq_length, 0)
         self.assertEqual(rnn.num_layers, 0)
         self.assertIsNone(rnn.dropout_desc)
         self.assertEqual(rnn.input_mode, -1)
@@ -159,15 +158,13 @@ class Test(unittest.TestCase):
         x_arr[:] = numpy.random.rand(x_arr.size).reshape(x_arr.shape) - 0.5
         x_desc = cudnn.TensorDescriptor()
         # Set input as 3-dimensional like in cudnn example.
-        x_desc.set_nd(CUTYPE,
-                      (x_arr.shape[1], x_arr.shape[0], 1))
+        x_desc.set_nd(CUTYPE, (x_arr.shape[0], x_arr.shape[1], 1))
         n_unroll = 5
         hidden_size = 16
         n_layers = 3
 
         def assert_values():
             self.assertEqual(rnn.hidden_size, hidden_size)
-            self.assertEqual(rnn.seq_length, n_unroll)
             self.assertEqual(rnn.num_layers, n_layers)
             self.assertIs(rnn.dropout_desc, drop)
             self.assertEqual(rnn.input_mode, cudnn.CUDNN_LINEAR_INPUT)
@@ -178,7 +175,7 @@ class Test(unittest.TestCase):
 
         # Full syntax
         rnn = cudnn.RNNDescriptor()
-        rnn.set(hidden_size, n_unroll, n_layers, drop,
+        rnn.set(hidden_size, n_layers, drop,
                 input_mode=cudnn.CUDNN_LINEAR_INPUT,
                 direction=cudnn.CUDNN_UNIDIRECTIONAL,
                 mode=cudnn.CUDNN_LSTM, data_type=CUTYPE)
@@ -199,9 +196,8 @@ class Test(unittest.TestCase):
         logging.debug("RNN train size for %s with %d unrolls is %d",
                       x_arr.shape, n_unroll, sz_train)
 
-        sz_weights = get_sz(self.cudnn.get_rnn_params_size)
-        logging.debug("RNN weights size for %s with %d unrolls is %d",
-                      x_arr.shape, n_unroll, sz_weights)
+        sz_weights = self.cudnn.get_rnn_params_size(rnn, x_desc)
+        logging.debug("RNN weights size for %s is %d", x_arr.shape, sz_weights)
         sz_expected = ITEMSIZE * (
             4 * (x_arr.shape[1] + hidden_size + 2) * hidden_size +
             4 * (hidden_size + hidden_size + 2) * hidden_size * (n_layers - 1))
@@ -216,14 +212,14 @@ class Test(unittest.TestCase):
         weights.to_device(weights_arr)
         w_desc = cudnn.FilterDescriptor()
         w = self.cudnn.get_rnn_lin_layer_matrix_params(
-            rnn, 0, x_descs, weights_desc, weights, 0, w_desc)
+            rnn, 0, x_desc, weights_desc, weights, 0, w_desc)
         logging.debug("Got matrix 0 of dimensions: %s, fmt=%d, sz=%d",
                       w_desc.dims, w_desc.fmt, w.size)
         self.assertEqual(w.size, hidden_size * x_arr.shape[1] * ITEMSIZE)
 
         b_desc = cudnn.FilterDescriptor()
         b = self.cudnn.get_rnn_lin_layer_bias_params(
-            rnn, 0, x_descs, weights_desc, weights, 0, b_desc)
+            rnn, 0, x_desc, weights_desc, weights, 0, b_desc)
         logging.debug("Got bias 0 of dimensions: %s, fmt=%d, sz=%d",
                       b_desc.dims, b_desc.fmt, b.size)
         self.assertEqual(b.size, hidden_size * ITEMSIZE)
@@ -251,11 +247,11 @@ class Test(unittest.TestCase):
         cy.memset32_async()
 
         y_desc = cudnn.TensorDescriptor()
-        y_desc.set_nd(CUTYPE, (hidden_size, batch_size, 1))
+        y_desc.set_nd(CUTYPE, (batch_size, hidden_size, 1))
         y_descs = tuple(y_desc for _i in range(n_unroll))
 
         h_desc = cudnn.TensorDescriptor()
-        h_desc.set_nd(CUTYPE, (hidden_size, batch_size, n_layers))
+        h_desc.set_nd(CUTYPE, (n_layers, batch_size, hidden_size))
 
         train_buf = cu.MemAlloc(self.ctx, sz_train)
         train_buf.memset32_async()
