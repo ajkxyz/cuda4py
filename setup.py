@@ -45,7 +45,7 @@ except ImportError:
 setup(
     name="cuda4py",
     description="CUDA cffi bindings and helper classes",
-    version="1.4.0",
+    version="1.4.1",
     license="Simplified BSD",
     author="Samsung Electronics Co.,Ltd.",
     author_email="a.kazantsev@samsung.com",
@@ -66,6 +66,7 @@ setup(
         "Programming Language :: Python :: 3.2",
         "Programming Language :: Python :: 3.3",
         "Programming Language :: Python :: 3.4",
+        "Programming Language :: Python :: 3.5",
         "Topic :: Software Development :: Libraries"
     ]
 )
