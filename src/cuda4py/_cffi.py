@@ -392,15 +392,16 @@ def _initialize(backends):
     ffi.cdef(src)
 
     # Load library
+    exc = []
     for libnme in backends:
         try:
             lib = ffi.dlopen(libnme)
             break
-        except OSError:
-            pass
+        except OSError as e:
+            exc.append(e)
     else:
         ffi = None
-        raise OSError("Could not load cuda library")
+        raise OSError("Could not load cuda library: %s" % exc)
 
 
 def initialize(backends=("libcuda.so", "nvcuda.dll")):
