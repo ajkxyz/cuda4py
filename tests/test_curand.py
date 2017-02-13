@@ -148,6 +148,52 @@ class Test(unittest.TestCase):
         self.assertEqual(rng.seed, 0)
         self.assertEqual(rng.offset, 0)
 
+    def test_generate(self):
+        rng = curand.CURAND(self.ctx)
+        rng.seed = 123
+        a = numpy.zeros(65536, dtype=numpy.int32)
+        a_buf = cu.MemAlloc(self.ctx, a)
+        rng.generate32(a_buf, a.size)
+        a_buf.to_host(a)
+        self.assertGreater(numpy.count_nonzero(a), a.size - a.size // 512)
+
+        # Check that seed matters
+        rng = curand.CURAND(self.ctx)
+        rng.seed = 123
+        rng.generate32(a_buf, a.size)
+        b = numpy.zeros_like(a)
+        a_buf.to_host(b)
+        self.assertEqual(numpy.count_nonzero(a - b), 0)
+
+        rng = curand.CURAND(self.ctx)
+        rng.seed = 456
+        rng.generate32(a_buf, a.size)
+        a_buf.to_host(b)
+        self.assertGreater(numpy.count_nonzero(a - b), a.size - a.size // 512)
+
+        # Check 64-bit version
+        rng = curand.CURAND(self.ctx, curand.CURAND_RNG_QUASI_SOBOL64)
+        try:
+            rng.seed = 123
+            self.assertTrue(
+                False, "CURAND_RNG_QUASI_SOBOL64 should not support seed")
+        except cu.CUDARuntimeError:
+            pass
+        rng.dimensions = 64
+        a_buf.memset32_async()
+        try:
+            rng.generate32(a_buf, a.size)
+            self.assertTrue(
+                False,
+                "CURAND_RNG_QUASI_SOBOL64 should not support generate32")
+        except cu.CUDARuntimeError:
+            pass
+        a64 = numpy.zeros(a.size // 2, dtype=numpy.int64)
+        rng.generate64(a_buf, a64.size)
+        a_buf.to_host(a64)
+        self.assertGreater(numpy.count_nonzero(a64),
+                           a64.size - a64.size // 256)
+
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)

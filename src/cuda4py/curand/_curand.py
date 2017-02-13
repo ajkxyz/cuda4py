@@ -110,12 +110,12 @@ def _initialize(backends):
     if lib is not None:
         return
     # C function definitions
-    # size_t instead of void* is used
+    # intptr_t instead of void* is used
     # for convinience with python calls and numpy arrays,
     # cffi automatically calls int() on objects also.
     src = """
     typedef int curandStatus_t;
-    typedef size_t curandGenerator_t;
+    typedef intptr_t curandGenerator_t;
     typedef int curandRngType_t;
     typedef int curandOrdering_t;
 
@@ -133,6 +133,11 @@ def _initialize(backends):
         curandGenerator_t generator, curandOrdering_t order);
     curandStatus_t curandSetQuasiRandomGeneratorDimensions(
         curandGenerator_t generator, unsigned int num_dimensions);
+
+    curandStatus_t curandGenerate(
+        curandGenerator_t generator, intptr_t outputPtr, size_t num);
+    curandStatus_t curandGenerateLongLong(
+        curandGenerator_t generator, intptr_t outputPtr, size_t num);
     """
 
     # Parse
@@ -295,6 +300,32 @@ class CURAND(object):
         if err:
             raise CU.error("curandSetQuasiRandomGeneratorDimensions", err)
         self._dimensions = int(value)
+
+    def generate32(self, dst, count):
+        """Generates specified number of 32-bit random values.
+
+        Not valid for 64-bit generators.
+
+        Parameters:
+            dst: buffer to store the results.
+            count: number of 32-bit values to put to dst.
+        """
+        err = self._lib.curandGenerate(self.handle, dst, count)
+        if err:
+            raise CU.error("curandGenerate", err)
+
+    def generate64(self, dst, count):
+        """Generates specified number of 64-bit random values.
+
+        Valid only for 64-bit generators.
+
+        Parameters:
+            dst: buffer to store the results.
+            count: number of 64-bit values to put to dst.
+        """
+        err = self._lib.curandGenerateLongLong(self.handle, dst, count)
+        if err:
+            raise CU.error("curandGenerateLongLong", err)
 
     def _release(self):
         if self._lib is not None and self.handle is not None:
