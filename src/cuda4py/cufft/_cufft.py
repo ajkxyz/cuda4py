@@ -34,7 +34,7 @@ Original author: Alexey Kazantsev <a.kazantsev@samsung.com>
 """
 
 """
-CUBLAS cffi bindings and helper classes.
+cuFFT cffi bindings and helper classes.
 """
 import cffi
 import cuda4py._cffi as cuffi
