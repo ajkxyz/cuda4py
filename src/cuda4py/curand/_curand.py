@@ -143,6 +143,24 @@ def _initialize(backends):
         curandGenerator_t generator, intptr_t outputPtr, size_t num);
     curandStatus_t curandGenerateUniformDouble(
         curandGenerator_t generator, intptr_t outputPtr, size_t num);
+
+    curandStatus_t curandGenerateNormal(
+        curandGenerator_t generator, intptr_t outputPtr, size_t n,
+        float mean, float stddev);
+    curandStatus_t curandGenerateNormalDouble(
+        curandGenerator_t generator, intptr_t outputPtr, size_t n,
+        double mean, double stddev);
+
+    curandStatus_t curandGenerateLogNormal(
+        curandGenerator_t generator, intptr_t outputPtr, size_t n,
+        float mean, float stddev);
+    curandStatus_t curandGenerateLogNormalDouble(
+        curandGenerator_t generator, intptr_t outputPtr, size_t n,
+        float mean, float stddev);
+
+    curandStatus_t curandGeneratePoisson(
+        curandGenerator_t generator, intptr_t outputPtr,
+        size_t n, double lambda);
     """
 
     # Parse
@@ -357,6 +375,78 @@ class CURAND(object):
         err = self._lib.curandGenerateUniformDouble(self.handle, dst, count)
         if err:
             raise CU.error("curandGenerateUniformDouble", err)
+
+    def generate_normal(self, dst, count, mean=0.0, stddev=1.0):
+        """Generates specified number of 32-bit normally distributed floats.
+
+        Parameters:
+            dst: buffer to store the results.
+            count: number of 32-bit floats to put to dst.
+            mean: mean of normal distribution to generate.
+            stddev: stddev of normal distribution to generate.
+        """
+        err = self._lib.curandGenerateNormal(
+            self.handle, dst, count, float(mean), float(stddev))
+        if err:
+            raise CU.error("curandGenerateNormal", err)
+
+    def generate_normal_double(self, dst, count, mean=0.0, stddev=1.0):
+        """Generates specified number of 64-bit normally distributed floats.
+
+        Parameters:
+            dst: buffer to store the results.
+            count: number of 64-bit floats to put to dst.
+            mean: mean of normal distribution to generate.
+            stddev: stddev of normal distribution to generate.
+        """
+        err = self._lib.curandGenerateNormalDouble(
+            self.handle, dst, count, float(mean), float(stddev))
+        if err:
+            raise CU.error("curandGenerateNormalDouble", err)
+
+    def generate_log_normal(self, dst, count, mean=0.0, stddev=1.0):
+        """Generates specified number of 32-bit log-normally distributed
+        floats.
+
+        Parameters:
+            dst: buffer to store the results.
+            count: number of 32-bit floats to put to dst.
+            mean: mean of associated normal distribution.
+            stddev: stddev of associated normal distribution.
+        """
+        err = self._lib.curandGenerateLogNormal(
+            self.handle, dst, count, float(mean), float(stddev))
+        if err:
+            raise CU.error("curandGenerateLogNormal", err)
+
+    def generate_log_normal_double(self, dst, count, mean=0.0, stddev=1.0):
+        """Generates specified number of 64-bit log-normally distributed
+        floats.
+
+        Parameters:
+            dst: buffer to store the results.
+            count: number of 64-bit floats to put to dst.
+            mean: mean of associated normal distribution.
+            stddev: stddev of associated normal distribution.
+        """
+        err = self._lib.curandGenerateLogNormalDouble(
+            self.handle, dst, count, float(mean), float(stddev))
+        if err:
+            raise CU.error("curandGenerateLogNormalDouble", err)
+
+    def generate_poisson(self, dst, count, lam=1.0):
+        """Generates specified number of 32-bit unsigned int point values
+        with Poisson distribution.
+
+        Parameters:
+            dst: buffer to store the results.
+            count: number of 32-bit floats to put to dst.
+            lam: lambda value of Poisson distribution.
+        """
+        err = self._lib.curandGeneratePoisson(
+            self.handle, dst, count, float(lam))
+        if err:
+            raise CU.error("curandGeneratePoisson", err)
 
     def _release(self):
         if self._lib is not None and self.handle is not None:

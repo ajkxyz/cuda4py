@@ -194,18 +194,12 @@ class Test(unittest.TestCase):
         self.assertGreater(numpy.count_nonzero(a64),
                            a64.size - a64.size // 256)
 
-    def _test_generate_uniform(self, dtype):
-        rng = curand.CURAND(self.ctx)
-        rng.seed = 123
+    def _test_generate_uniform(self, dtype, func):
         a = numpy.zeros(65536, dtype=dtype)
         a_buf = cu.MemAlloc(self.ctx, a)
-        if a.itemsize == 4:
-            rng.generate_uniform(a_buf, a.size)
-        elif a.itemsize == 8:
-            rng.generate_uniform_double(a_buf, a.size)
-        else:
-            self.assertTrue(False, "Unsupported dtype")
+        func(a_buf, a.size)
         a_buf.to_host(a)
+        # Simple test for correctness
         N = 20
         counts = [0 for _i in range(N)]
         for x in a:
@@ -214,8 +208,48 @@ class Test(unittest.TestCase):
             self.assertLess(abs(c - a.size // N), a.size // N // 8)
 
     def test_generate_uniform(self):
-        self._test_generate_uniform(numpy.float32)
-        self._test_generate_uniform(numpy.float64)
+        rng = curand.CURAND(self.ctx)
+        rng.seed = 123
+        self._test_generate_uniform(numpy.float32, rng.generate_uniform)
+        self._test_generate_uniform(numpy.float64, rng.generate_uniform_double)
+
+    def _test_generate_normal(self, dtype, func):
+        a = numpy.zeros(65536, dtype=dtype)
+        a_buf = cu.MemAlloc(self.ctx, a)
+        mean = 1.0
+        stddev = 2.0
+        func(a_buf, a.size)
+        func(a_buf, a.size, mean, stddev)
+        a_buf.to_host(a)
+        # TODO(a.kazantsev): add better test for correctness.
+        self.assertGreater(numpy.count_nonzero(a), a.size - a.size // 512)
+        return a
+
+    def test_generate_normal(self):
+        rng = curand.CURAND(self.ctx)
+        rng.seed = 123
+        a = self._test_generate_normal(numpy.float32, rng.generate_normal)
+        a64 = self._test_generate_normal(
+            numpy.float64, rng.generate_normal_double)
+        rng = curand.CURAND(self.ctx)
+        rng.seed = 123
+        b = self._test_generate_normal(numpy.float32, rng.generate_log_normal)
+        b64 = self._test_generate_normal(
+            numpy.float64, rng.generate_log_normal_double)
+        self.assertGreater(numpy.count_nonzero(a - b), a.size - a.size // 512)
+        self.assertGreater(
+            numpy.count_nonzero(a64 - b64), a.size - a.size // 512)
+
+    def test_poisson(self):
+        rng = curand.CURAND(self.ctx)
+        rng.seed = 123
+        a = numpy.zeros(65536, dtype=numpy.uint32)
+        a_buf = cu.MemAlloc(self.ctx, a)
+        rng.generate_poisson(a_buf, a.size)
+        rng.generate_poisson(a_buf, a.size, 1.0)
+        a_buf.to_host(a)
+        # TODO(a.kazantsev): add better test for correctness.
+        self.assertGreater(numpy.count_nonzero(a), a.size // 2)
 
 
 if __name__ == "__main__":
