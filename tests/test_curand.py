@@ -194,6 +194,29 @@ class Test(unittest.TestCase):
         self.assertGreater(numpy.count_nonzero(a64),
                            a64.size - a64.size // 256)
 
+    def _test_generate_uniform(self, dtype):
+        rng = curand.CURAND(self.ctx)
+        rng.seed = 123
+        a = numpy.zeros(65536, dtype=dtype)
+        a_buf = cu.MemAlloc(self.ctx, a)
+        if a.itemsize == 4:
+            rng.generate_uniform(a_buf, a.size)
+        elif a.itemsize == 8:
+            rng.generate_uniform_double(a_buf, a.size)
+        else:
+            self.assertTrue(False, "Unsupported dtype")
+        a_buf.to_host(a)
+        N = 20
+        counts = [0 for _i in range(N)]
+        for x in a:
+            counts[int(x * N)] += 1
+        for c in counts:
+            self.assertLess(abs(c - a.size // N), a.size // N // 8)
+
+    def test_generate_uniform(self):
+        self._test_generate_uniform(numpy.float32)
+        self._test_generate_uniform(numpy.float64)
+
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)

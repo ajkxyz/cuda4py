@@ -138,6 +138,11 @@ def _initialize(backends):
         curandGenerator_t generator, intptr_t outputPtr, size_t num);
     curandStatus_t curandGenerateLongLong(
         curandGenerator_t generator, intptr_t outputPtr, size_t num);
+
+    curandStatus_t curandGenerateUniform(
+        curandGenerator_t generator, intptr_t outputPtr, size_t num);
+    curandStatus_t curandGenerateUniformDouble(
+        curandGenerator_t generator, intptr_t outputPtr, size_t num);
     """
 
     # Parse
@@ -326,6 +331,32 @@ class CURAND(object):
         err = self._lib.curandGenerateLongLong(self.handle, dst, count)
         if err:
             raise CU.error("curandGenerateLongLong", err)
+
+    def generate_uniform(self, dst, count):
+        """Generates specified number of 32-bit uniformly distributed floats.
+
+        Will generate values in range (0, 1].
+
+        Parameters:
+            dst: buffer to store the results.
+            count: number of 32-bit floats to put to dst.
+        """
+        err = self._lib.curandGenerateUniform(self.handle, dst, count)
+        if err:
+            raise CU.error("curandGenerateUniform", err)
+
+    def generate_uniform_double(self, dst, count):
+        """Generates specified number of 64-bit uniformly distributed floats.
+
+        Will generate values in range (0, 1].
+
+        Parameters:
+            dst: buffer to store the results.
+            count: number of 64-bit floats to put to dst.
+        """
+        err = self._lib.curandGenerateUniformDouble(self.handle, dst, count)
+        if err:
+            raise CU.error("curandGenerateUniformDouble", err)
 
     def _release(self):
         if self._lib is not None and self.handle is not None:
