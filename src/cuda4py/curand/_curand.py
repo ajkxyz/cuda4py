@@ -114,6 +114,8 @@ def _initialize(backends):
     curandStatus_t curandCreateGenerator(
         curandGenerator_t *generator, curandRngType_t rng_type);
     curandStatus_t curandDestroyGenerator(curandGenerator_t generator);
+
+    curandStatus_t curandGetVersion(int *version);
     """
 
     # Parse
@@ -180,6 +182,16 @@ class CURAND(object):
     @property
     def context(self):
         return self._context
+
+    @property
+    def version(self):
+        """Returns cuRAND version.
+        """
+        version = ffi.new("int *")
+        err = self._lib.curandGetVersion(version)
+        if err:
+            raise CU.error("curandGetVersion", err)
+        return int(version[0])
 
     def _release(self):
         if self._lib is not None and self.handle is not None:

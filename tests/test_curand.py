@@ -101,6 +101,12 @@ class Test(unittest.TestCase):
         rng = curand.CURAND(self.ctx)
         del rng
 
+    def test_version(self):
+        rng = curand.CURAND(self.ctx)
+        ver = rng.version
+        logging.debug("cuRAND version is %d", ver)
+        self.assertTrue(ver == int(ver))
+
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)

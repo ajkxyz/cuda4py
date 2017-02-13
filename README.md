@@ -3,7 +3,7 @@ cuda4py
 
 Python cffi CUDA bindings and helper classes.
 
-Tested with Python 2.7, Python 3.4 and PyPy on Linux with CUDA 7.5.
+Tested with Python 2.7, Python 3.4 and PyPy on Linux with CUDA 8.0.
 
 To compile kernel code written in C++, nvcc should be in PATH and
 exported functions should be marked as extern "C"
@@ -13,6 +13,7 @@ Functions in plain PTX can be used without nvcc.
 To use CUBLAS, libcublas.so (cublas64_65.dll) should be present.
 To use CUDNN, libcudnn.so (cudnn64_65.dll) should be present.
 To use CUFFT, libcufft.so (cufft64_65.dll) should be present.
+To use CURAND, libcurand.so (curand64_65.dll) should be present.
 
 Not all CUDA api is currently covered.
 
