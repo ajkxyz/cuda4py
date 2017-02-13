@@ -93,6 +93,11 @@ class Test(unittest.TestCase):
         self.assertEqual(curand.CURAND_RNG_QUASI_SOBOL64, 203)
         self.assertEqual(curand.CURAND_RNG_QUASI_SCRAMBLED_SOBOL64, 204)
 
+        self.assertEqual(curand.CURAND_ORDERING_PSEUDO_BEST, 100)
+        self.assertEqual(curand.CURAND_ORDERING_PSEUDO_DEFAULT, 101)
+        self.assertEqual(curand.CURAND_ORDERING_PSEUDO_SEEDED, 102)
+        self.assertEqual(curand.CURAND_ORDERING_QUASI_DEFAULT, 201)
+
     def test_errors(self):
         idx = cu.CU.ERRORS[curand.CURAND_STATUS_NOT_INITIALIZED].find(" | ")
         self.assertGreater(idx, 0)
@@ -101,11 +106,47 @@ class Test(unittest.TestCase):
         rng = curand.CURAND(self.ctx)
         del rng
 
-    def test_version(self):
+    def test_properties(self):
         rng = curand.CURAND(self.ctx)
+        self.assertEqual(rng.rng_type, curand.CURAND_RNG_PSEUDO_DEFAULT)
+
+        # version
         ver = rng.version
         logging.debug("cuRAND version is %d", ver)
         self.assertTrue(ver == int(ver))
+
+        # ordering, seed, offset, dimensions
+        self.assertEqual(rng.ordering, 0)
+        rng.ordering = curand.CURAND_ORDERING_PSEUDO_DEFAULT
+
+        try:
+            rng.dimensions = 64
+        except cu.CUDARuntimeError:
+            pass
+        self.assertEqual(rng.dimensions, 0)
+
+        self.assertEqual(rng.ordering, curand.CURAND_ORDERING_PSEUDO_DEFAULT)
+        self.assertEqual(rng.seed, 0)
+        self.assertEqual(rng.offset, 0)
+        rng.seed = 123
+        self.assertEqual(rng.seed, 123)
+        self.assertEqual(rng.offset, 0)
+        rng.offset = 4096
+        self.assertEqual(rng.seed, 123)
+        self.assertEqual(rng.offset, 4096)
+        rng.seed = 12345.1
+        rng.offset = 8192.3
+        self.assertEqual(rng.seed, 12345)
+        self.assertEqual(rng.offset, 8192)
+        self.assertEqual(rng.ordering, curand.CURAND_ORDERING_PSEUDO_DEFAULT)
+
+        rng = curand.CURAND(self.ctx, curand.CURAND_RNG_QUASI_DEFAULT)
+        rng.dimensions = 64
+        self.assertEqual(rng.dimensions, 64)
+        self.assertEqual(rng.rng_type, curand.CURAND_RNG_QUASI_DEFAULT)
+        self.assertEqual(rng.ordering, 0)
+        self.assertEqual(rng.seed, 0)
+        self.assertEqual(rng.offset, 0)
 
 
 if __name__ == "__main__":

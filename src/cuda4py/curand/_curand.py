@@ -98,6 +98,13 @@ CURAND_RNG_QUASI_SOBOL64 = 203  # Sobol64 quasirandom
 CURAND_RNG_QUASI_SCRAMBLED_SOBOL64 = 204  # Scrambled Sobol64 quasirandom
 
 
+#: curandOrdering
+CURAND_ORDERING_PSEUDO_BEST = 100  # Best ordering for pseudorandom results
+CURAND_ORDERING_PSEUDO_DEFAULT = 101  # Specific default 4096 thread sequence
+CURAND_ORDERING_PSEUDO_SEEDED = 102  # Fast lower quality pseudorandom results
+CURAND_ORDERING_QUASI_DEFAULT = 201  # N-dimensional ordering for quasirandom
+
+
 def _initialize(backends):
     global lib
     if lib is not None:
@@ -110,12 +117,22 @@ def _initialize(backends):
     typedef int curandStatus_t;
     typedef size_t curandGenerator_t;
     typedef int curandRngType_t;
+    typedef int curandOrdering_t;
 
     curandStatus_t curandCreateGenerator(
         curandGenerator_t *generator, curandRngType_t rng_type);
     curandStatus_t curandDestroyGenerator(curandGenerator_t generator);
 
     curandStatus_t curandGetVersion(int *version);
+
+    curandStatus_t curandSetPseudoRandomGeneratorSeed(
+        curandGenerator_t generator, unsigned long long seed);
+    curandStatus_t curandSetGeneratorOffset(
+        curandGenerator_t generator, unsigned long long offset);
+    curandStatus_t curandSetGeneratorOrdering(
+        curandGenerator_t generator, curandOrdering_t order);
+    curandStatus_t curandSetQuasiRandomGeneratorDimensions(
+        curandGenerator_t generator, unsigned int num_dimensions);
     """
 
     # Parse
@@ -157,6 +174,17 @@ def initialize(backends=("libcurand.so", "curand64_65.dll")):
 
 class CURAND(object):
     """cuRAND base object.
+
+    Attributes:
+        _context: CUDA context.
+        _lib: handle to shared library.
+        _handle: cuRAND Generator's instance.
+        _rng_type: type of generator passed to the constructor.
+        _seed: last successfully set seed (default 0).
+        _offset: last successfully set offset (default 0).
+        _ordering: last successfully set ordering (default 0).
+        _dimensions: last seccessfully set dimensions (default 0),
+                     meaningfull only for quasirandom generators.
     """
     def __init__(self, context, rng_type=CURAND_RNG_PSEUDO_DEFAULT):
         self._context = context
@@ -165,12 +193,17 @@ class CURAND(object):
         initialize()
         handle = ffi.new("curandGenerator_t *")
         with context:
-            err = lib.curandCreateGenerator(handle, rng_type)
+            err = lib.curandCreateGenerator(handle, int(rng_type))
         if err:
             self._handle = None
             raise CU.error("curandCreateGenerator", err)
         self._lib = lib  # to hold the reference
         self._handle = int(handle[0])
+        self._rng_type = int(rng_type)
+        self._seed = 0
+        self._offset = 0
+        self._ordering = 0
+        self._dimensions = 0
 
     def __int__(self):
         return self.handle
@@ -184,6 +217,12 @@ class CURAND(object):
         return self._context
 
     @property
+    def rng_type(self):
+        """Returns type of generator passed to the constructor.
+        """
+        return self._rng_type
+
+    @property
     def version(self):
         """Returns cuRAND version.
         """
@@ -192,6 +231,70 @@ class CURAND(object):
         if err:
             raise CU.error("curandGetVersion", err)
         return int(version[0])
+
+    @property
+    def seed(self):
+        """Returns last successfully set seed.
+        """
+        return self._seed
+
+    @seed.setter
+    def seed(self, value):
+        """Sets generator seed as an 64-bit integer.
+        """
+        err = self._lib.curandSetPseudoRandomGeneratorSeed(
+            self.handle, int(value))
+        if err:
+            raise CU.error("curandSetPseudoRandomGeneratorSeed", err)
+        self._seed = int(value)
+
+    @property
+    def offset(self):
+        """Returns last successfully set offset.
+        """
+        return self._offset
+
+    @offset.setter
+    def offset(self, value):
+        """Sets generator offset as an 64-bit integer.
+        """
+        err = self._lib.curandSetGeneratorOffset(
+            self.handle, int(value))
+        if err:
+            raise CU.error("curandSetGeneratorOffset", err)
+        self._offset = int(value)
+
+    @property
+    def ordering(self):
+        """Returns last successfully set ordering.
+        """
+        return self._ordering
+
+    @ordering.setter
+    def ordering(self, value):
+        """Sets generator ordering.
+        """
+        err = self._lib.curandSetGeneratorOrdering(
+            self.handle, int(value))
+        if err:
+            raise CU.error("curandSetGeneratorOrdering", err)
+        self._ordering = int(value)
+
+    @property
+    def dimensions(self):
+        """Returns last successfully set dimensions.
+        """
+        return self._dimensions
+
+    @dimensions.setter
+    def dimensions(self, value):
+        """Sets quasirandom generator dimensions.
+        """
+        err = self._lib.curandSetQuasiRandomGeneratorDimensions(
+            self.handle, int(value))
+        if err:
+            raise CU.error("curandSetQuasiRandomGeneratorDimensions", err)
+        self._dimensions = int(value)
 
     def _release(self):
         if self._lib is not None and self.handle is not None:

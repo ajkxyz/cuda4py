@@ -53,6 +53,11 @@ from cuda4py.curand._curand import (CURAND,
                                     CURAND_RNG_QUASI_SOBOL64,
                                     CURAND_RNG_QUASI_SCRAMBLED_SOBOL64,
 
+                                    CURAND_ORDERING_PSEUDO_BEST,
+                                    CURAND_ORDERING_PSEUDO_DEFAULT,
+                                    CURAND_ORDERING_PSEUDO_SEEDED,
+                                    CURAND_ORDERING_QUASI_DEFAULT,
+
                                     CURAND_STATUS_SUCCESS,
                                     CURAND_STATUS_VERSION_MISMATCH,
                                     CURAND_STATUS_NOT_INITIALIZED,
