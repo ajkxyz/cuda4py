@@ -251,14 +251,17 @@ class Test(unittest.TestCase):
             b64[:] = a_buf.view(numpy.int64)[:]
         self.assertEqual(numpy.count_nonzero(a64 - b64), 0)
 
-    def _test_generate_uniform(self, dtype, func, pass_size):
+    def _test_generate_uniform(self, ctx, dtype, func, pass_size):
         a = numpy.zeros(65536, dtype=dtype)
-        a_buf = cu.MemAlloc(self.ctx, a)
+        a_buf = cu.MemAlloc(ctx, a) if ctx is not None else numpy.zeros_like(a)
         if pass_size:
             func(a_buf, a.size)
         else:
             func(a_buf)
-        a_buf.to_host(a)
+        if ctx is not None:
+            a_buf.to_host(a)
+        else:
+            a[:] = a_buf[:]
         # Simple test for correctness
         N = 20
         counts = [0 for _i in range(N)]
@@ -269,20 +272,22 @@ class Test(unittest.TestCase):
         return a
 
     def test_generate_uniform(self):
-        res = []
-        for pass_size in (True, False):
-            rng = curand.CURAND(self.ctx)
-            rng.seed = 123
-            res.append(self._test_generate_uniform(
-                numpy.float32, rng.generate_uniform, pass_size))
-            res.append(self._test_generate_uniform(
-                numpy.float64, rng.generate_uniform_double, pass_size))
-        for i in range(2):
-            self.assertEqual(numpy.count_nonzero(res[i] - res[i + 2]), 0)
+        for ctx in (self.ctx, None):
+            res = []
+            for pass_size in (True, False):
+                rng = curand.CURAND(ctx)
+                rng.seed = 123
+                res.append(self._test_generate_uniform(
+                    ctx, numpy.float32, rng.generate_uniform, pass_size))
+                res.append(self._test_generate_uniform(
+                    ctx, numpy.float64, rng.generate_uniform_double,
+                    pass_size))
+            for i in range(2):
+                self.assertEqual(numpy.count_nonzero(res[i] - res[i + 2]), 0)
 
-    def _test_generate_normal(self, dtype, func, pass_size):
+    def _test_generate_normal(self, ctx, dtype, func, pass_size):
         a = numpy.zeros(65536, dtype=dtype)
-        a_buf = cu.MemAlloc(self.ctx, a)
+        a_buf = cu.MemAlloc(ctx, a) if ctx is not None else numpy.zeros_like(a)
         mean = 1.0
         stddev = 2.0
         if pass_size:
@@ -291,53 +296,63 @@ class Test(unittest.TestCase):
         else:
             func(a_buf)
             func(a_buf, mean=mean, stddev=stddev)
-        a_buf.to_host(a)
+        if ctx is not None:
+            a_buf.to_host(a)
+        else:
+            a[:] = a_buf[:]
         # TODO(a.kazantsev): add better test for correctness.
         self.assertGreater(numpy.count_nonzero(a), a.size - a.size // 512)
         return a
 
     def test_generate_normal(self):
-        res = []
-        for pass_size in (True, False):
-            rng = curand.CURAND(self.ctx)
-            rng.seed = 123
-            a = self._test_generate_normal(
-                numpy.float32, rng.generate_normal, pass_size)
-            a64 = self._test_generate_normal(
-                numpy.float64, rng.generate_normal_double, pass_size)
-            rng = curand.CURAND(self.ctx)
-            rng.seed = 123
-            b = self._test_generate_normal(
-                numpy.float32, rng.generate_log_normal, pass_size)
-            b64 = self._test_generate_normal(
-                numpy.float64, rng.generate_log_normal_double, pass_size)
-            self.assertGreater(numpy.count_nonzero(a - b),
-                               a.size - a.size // 512)
-            self.assertGreater(
-                numpy.count_nonzero(a64 - b64), a.size - a.size // 512)
-            res.extend((a, a64, b, b64))
-        for i in range(4):
-            self.assertEqual(numpy.count_nonzero(res[i] - res[i + 4]), 0)
+        for ctx in (self.ctx, None):
+            res = []
+            for pass_size in (True, False):
+                rng = curand.CURAND(ctx)
+                rng.seed = 123
+                a = self._test_generate_normal(
+                    ctx, numpy.float32, rng.generate_normal, pass_size)
+                a64 = self._test_generate_normal(
+                    ctx, numpy.float64, rng.generate_normal_double, pass_size)
+                rng = curand.CURAND(ctx)
+                rng.seed = 123
+                b = self._test_generate_normal(
+                    ctx, numpy.float32, rng.generate_log_normal, pass_size)
+                b64 = self._test_generate_normal(
+                    ctx, numpy.float64, rng.generate_log_normal_double,
+                    pass_size)
+                self.assertGreater(numpy.count_nonzero(a - b),
+                                   a.size - a.size // 512)
+                self.assertGreater(
+                    numpy.count_nonzero(a64 - b64), a.size - a.size // 512)
+                res.extend((a, a64, b, b64))
+            for i in range(4):
+                self.assertEqual(numpy.count_nonzero(res[i] - res[i + 4]), 0)
 
     def test_poisson(self):
-        res = []
-        for pass_size in (True, False):
-            rng = curand.CURAND(self.ctx)
-            rng.seed = 123
-            a = numpy.zeros(65536, dtype=numpy.uint32)
-            a_buf = cu.MemAlloc(self.ctx, a)
-            if pass_size:
-                rng.generate_poisson(a_buf, a.size)
-                rng.generate_poisson(a_buf, a.size, 1.0)
-            else:
-                rng.generate_poisson(a_buf)
-                rng.generate_poisson(a_buf, lam=1.0)
-            a_buf.to_host(a)
-            # TODO(a.kazantsev): add better test for correctness.
-            self.assertGreater(numpy.count_nonzero(a), a.size // 2)
-            res.append(a)
-        for i in range(1):
-            self.assertEqual(numpy.count_nonzero(res[i] - res[i + 1]), 0)
+        for ctx in (self.ctx, None):
+            res = []
+            for pass_size in (True, False):
+                rng = curand.CURAND(ctx)
+                rng.seed = 123
+                a = numpy.zeros(65536, dtype=numpy.uint32)
+                a_buf = (cu.MemAlloc(ctx, a) if ctx is not None
+                         else numpy.zeros_like(a))
+                if pass_size:
+                    rng.generate_poisson(a_buf, a.size)
+                    rng.generate_poisson(a_buf, a.size, 1.0)
+                else:
+                    rng.generate_poisson(a_buf)
+                    rng.generate_poisson(a_buf, lam=1.0)
+                if ctx is not None:
+                    a_buf.to_host(a)
+                else:
+                    a[:] = a_buf[:]
+                # TODO(a.kazantsev): add better test for correctness.
+                self.assertGreater(numpy.count_nonzero(a), a.size // 2)
+                res.append(a)
+            for i in range(1):
+                self.assertEqual(numpy.count_nonzero(res[i] - res[i + 1]), 0)
 
 
 if __name__ == "__main__":
