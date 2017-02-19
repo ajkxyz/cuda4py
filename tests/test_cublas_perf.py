@@ -79,13 +79,18 @@ class Test(unittest.TestCase):
         if not len(path):
             path = "."
         with cu.Devices().create_some_context() as ctx:
-            if ctx.device.compute_capability < (3, 5):
+            cap = ctx.device.compute_capability
+            if cap < (3, 5):
                 return
 
             logging.info("Compiling...")
             m = ctx.create_module(
                 source_file=(path + "/cublas_perf.cu"),
-                nvcc_options2=cu.Module.OPTIONS_CUBLAS)
+                nvcc_options2=cu.Module.OPTIONS_CUBLAS,
+                compute_capability=(cap[0], 0) if cap >= (6, 0) else cap)
+            # minor version of compute has to be set to 0
+            # to work on Pascal with CUDA 8.0
+
             create_cublas = m.create_function("create_cublas")
             destroy_cublas = m.create_function("destroy_cublas")
             test = m.create_function("test")

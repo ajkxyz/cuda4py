@@ -170,14 +170,18 @@ class Test(unittest.TestCase):
 
     def test_kernel(self):
         logging.debug("ENTER: test_kernel")
-        if self.ctx.device.compute_capability < (3, 5):
-            logging.debug("Requires compute capability >= (3, 5)")
+        cap = self.ctx.device.compute_capability
+        if cap < (3, 5):
+            logging.debug("Requires compute capability >= (3, 5), got %s", cap)
             logging.debug("EXIT: test_kernel")
             return
         with self.ctx:
             module = cu.Module(
                 self.ctx, source_file=("%s/cublas.cu" % self.path),
-                nvcc_options2=cu.Module.OPTIONS_CUBLAS)
+                nvcc_options2=cu.Module.OPTIONS_CUBLAS,
+                compute_capability=(cap[0], 0) if cap >= (6, 0) else cap)
+            # minor version of compute has to be set to 0
+            # to work on Pascal with CUDA 8.0
             logging.debug("Compiled")
             f = module.create_function("test")
             logging.debug("Got function")

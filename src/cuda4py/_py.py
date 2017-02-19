@@ -672,7 +672,8 @@ class Module(CU):
     def __init__(self, context, ptx=None, source=None, source_file=None,
                  nvcc_options=("-O3", "--ftz=true", "--fmad=true"),
                  nvcc_path="nvcc", include_dirs=(),
-                 nvcc_options2=OPTIONS_PTX):
+                 nvcc_options2=OPTIONS_PTX,
+                 compute_capability=None):
         """Calls cuModuleLoadData, invoking nvcc if ptx is not None.
 
         Parameters:
@@ -685,6 +686,9 @@ class Module(CU):
             include_dirs: include directories for nvcc.
             nvcc_options2: more options for nvcc (defaults to ("-ptx",)),
                 example: ("-cubin", "-lcudadevrt", "-lcublas_device", "-dlink")
+            compute_capability: compute capability to use for source
+                                compilation as tuple (major, minor) or None
+                                to use maximum available.
         """
         super(Module, self).__init__()
         context._add_ref(self)
@@ -710,8 +714,10 @@ class Module(CU):
                 if not len(dirnme):
                     continue
                 nvcc_options.extend(("-I", dirnme))
-            nvcc_options.append("-arch=sm_%d%d" %
-                                context.device.compute_capability)
+            nvcc_options.append(
+                "-arch=sm_%d%d" %
+                (context.device.compute_capability
+                 if compute_capability is None else compute_capability))
             nvcc_options.extend(nvcc_options2)
             nvcc_options.extend(("-o", ptx_file))
             nvcc_options.insert(0, nvcc_path)
@@ -736,7 +742,7 @@ class Module(CU):
                                    "\nCommand line was:\n%s" %
                                    (err, self.stderr.decode("utf-8"),
                                     " ".join(nvcc_options)))
-        self._ptx = ptx.encode("utf-8") if type(ptx) != type(b"") else ptx
+        self._ptx = ptx if isinstance(ptx, type(b"")) else ptx.encode("utf-8")
 
         # Workaround to prevent deadlock in pypy when doing
         # garbage collection inside CFFI.new
@@ -866,10 +872,11 @@ class Context(CU):
     def create_module(self, ptx=None, source=None, source_file=None,
                       nvcc_options=("-O3", "--ftz=true", "--fmad=true"),
                       nvcc_path="nvcc", include_dirs=(),
-                      nvcc_options2=Module.OPTIONS_PTX):
+                      nvcc_options2=Module.OPTIONS_PTX,
+                      compute_capability=None):
         return Module(self, ptx, source, source_file,
                       nvcc_options, nvcc_path, include_dirs,
-                      nvcc_options2)
+                      nvcc_options2, compute_capability)
 
     def set_current(self):
         err = self._lib.cuCtxSetCurrent(self.handle)

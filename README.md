@@ -3,7 +3,7 @@ cuda4py
 
 Python cffi CUDA bindings and helper classes.
 
-Tested with Python 2.7, Python 3.4 and PyPy on Linux with CUDA 8.0.
+Tested with Python 2.7, Python 3.6 and PyPy on Linux with CUDA 8.0.
 
 To compile kernel code written in C++, nvcc should be in PATH and
 exported functions should be marked as extern "C"
