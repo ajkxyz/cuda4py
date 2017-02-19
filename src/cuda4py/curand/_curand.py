@@ -156,11 +156,14 @@ def _initialize(backends):
         float mean, float stddev);
     curandStatus_t curandGenerateLogNormalDouble(
         curandGenerator_t generator, intptr_t outputPtr, size_t n,
-        float mean, float stddev);
+        double mean, double stddev);
 
     curandStatus_t curandGeneratePoisson(
         curandGenerator_t generator, intptr_t outputPtr,
         size_t n, double lambda);
+
+    curandStatus_t curandCreateGeneratorHost(
+        curandGenerator_t *generator, curandRngType_t rng_type);
     """
 
     # Parse
@@ -204,7 +207,7 @@ class CURAND(object):
     """cuRAND base object.
 
     Attributes:
-        _context: CUDA context.
+        _context: CUDA context or None in case of host generator.
         _lib: handle to shared library.
         _handle: cuRAND Generator's instance.
         _rng_type: type of generator passed to the constructor.
@@ -215,16 +218,27 @@ class CURAND(object):
                      meaningfull only for quasirandom generators.
     """
     def __init__(self, context, rng_type=CURAND_RNG_PSEUDO_DEFAULT):
+        """Constructor.
+
+        Parameters:
+            context: CUDA context handle or None to use the host generator.
+            rng_type: type of the random generator.
+        """
         self._context = context
         self._lib = None
-        context._add_ref(self)
+        if context is not None:
+            context._add_ref(self)
         initialize()
         handle = ffi.new("curandGenerator_t *")
-        with context:
-            err = lib.curandCreateGenerator(handle, int(rng_type))
+        if context is not None:
+            with context:
+                err = lib.curandCreateGenerator(handle, int(rng_type))
+        else:
+            err = lib.curandCreateGeneratorHost(handle, int(rng_type))
         if err:
             self._handle = None
-            raise CU.error("curandCreateGenerator", err)
+            raise CU.error("curandCreateGenerator" if context is not None
+                           else "curandCreateGeneratorHost", err)
         self._lib = lib  # to hold the reference
         self._handle = int(handle[0])
         self._rng_type = int(rng_type)
@@ -324,125 +338,169 @@ class CURAND(object):
             raise CU.error("curandSetQuasiRandomGeneratorDimensions", err)
         self._dimensions = int(value)
 
-    def generate32(self, dst, count):
+    def _extract_ptr_and_count(self, arr, count, itemsize):
+        """Returns tuple of address of an arr and extracted item count
+        casted to int.
+
+        It will clamp requested count to an array size if possible.
+        """
+        if self.context is None:
+            arr, size = CU.extract_ptr_and_size(arr, None)
+        elif count is None:
+            size = arr.size
+        else:
+            size = getattr(arr, "size", count * itemsize)
+        size = size if count is None else min(count * itemsize, size)
+        return int(arr), int(size) // itemsize
+
+    def generate32(self, dst, count=None):
         """Generates specified number of 32-bit random values.
 
         Not valid for 64-bit generators.
 
         Parameters:
-            dst: buffer to store the results.
-            count: number of 32-bit values to put to dst.
+            dst: buffer to store the results or
+                 numpy array in case of host generator.
+            count: number of 32-bit values to put to dst or
+                   None to fill full dst when the it's size is available.
         """
+        dst, count = self._extract_ptr_and_count(dst, count, 4)
         err = self._lib.curandGenerate(self.handle, dst, count)
         if err:
             raise CU.error("curandGenerate", err)
 
-    def generate64(self, dst, count):
+    def generate64(self, dst, count=None):
         """Generates specified number of 64-bit random values.
 
         Valid only for 64-bit generators.
 
         Parameters:
-            dst: buffer to store the results.
-            count: number of 64-bit values to put to dst.
+            dst: buffer to store the results or
+                 numpy array in case of host generator.
+            count: number of 64-bit values to put to dst or
+                   None to fill full dst when the it's size is available.
         """
+        dst, count = self._extract_ptr_and_count(dst, count, 8)
         err = self._lib.curandGenerateLongLong(self.handle, dst, count)
         if err:
             raise CU.error("curandGenerateLongLong", err)
 
-    def generate_uniform(self, dst, count):
+    def generate_uniform(self, dst, count=None):
         """Generates specified number of 32-bit uniformly distributed floats.
 
         Will generate values in range (0, 1].
 
         Parameters:
-            dst: buffer to store the results.
-            count: number of 32-bit floats to put to dst.
+            dst: buffer to store the results or
+                 numpy array in case of host generator.
+            count: number of 32-bit floats to put to dst or
+                   None to fill full dst when the it's size is available.
         """
+        dst, count = self._extract_ptr_and_count(dst, count, 4)
         err = self._lib.curandGenerateUniform(self.handle, dst, count)
         if err:
             raise CU.error("curandGenerateUniform", err)
 
-    def generate_uniform_double(self, dst, count):
+    def generate_uniform_double(self, dst, count=None):
         """Generates specified number of 64-bit uniformly distributed floats.
 
         Will generate values in range (0, 1].
 
         Parameters:
-            dst: buffer to store the results.
-            count: number of 64-bit floats to put to dst.
+            dst: buffer to store the results or
+                 numpy array in case of host generator.
+            count: number of 64-bit floats to put to dst or
+                   None to fill full dst when the it's size is available.
         """
-        err = self._lib.curandGenerateUniformDouble(self.handle, dst, count)
+        dst, count = self._extract_ptr_and_count(dst, count, 8)
+        err = self._lib.curandGenerateUniformDouble(
+            self.handle, dst, count)
         if err:
             raise CU.error("curandGenerateUniformDouble", err)
 
-    def generate_normal(self, dst, count, mean=0.0, stddev=1.0):
+    def generate_normal(self, dst, count=None, mean=0.0, stddev=1.0):
         """Generates specified number of 32-bit normally distributed floats.
 
         Parameters:
-            dst: buffer to store the results.
-            count: number of 32-bit floats to put to dst.
+            dst: buffer to store the results or
+                 numpy array in case of host generator.
+            count: number of 32-bit floats to put to dst or
+                   None to fill full dst when the it's size is available.
             mean: mean of normal distribution to generate.
             stddev: stddev of normal distribution to generate.
         """
+        dst, count = self._extract_ptr_and_count(dst, count, 4)
         err = self._lib.curandGenerateNormal(
             self.handle, dst, count, float(mean), float(stddev))
         if err:
             raise CU.error("curandGenerateNormal", err)
 
-    def generate_normal_double(self, dst, count, mean=0.0, stddev=1.0):
+    def generate_normal_double(self, dst, count=None, mean=0.0, stddev=1.0):
         """Generates specified number of 64-bit normally distributed floats.
 
         Parameters:
-            dst: buffer to store the results.
-            count: number of 64-bit floats to put to dst.
+            dst: buffer to store the results or
+                 numpy array in case of host generator.
+            count: number of 64-bit floats to put to dst or
+                   None to fill full dst when the it's size is available.
             mean: mean of normal distribution to generate.
             stddev: stddev of normal distribution to generate.
         """
+        dst, count = self._extract_ptr_and_count(dst, count, 8)
         err = self._lib.curandGenerateNormalDouble(
             self.handle, dst, count, float(mean), float(stddev))
         if err:
             raise CU.error("curandGenerateNormalDouble", err)
 
-    def generate_log_normal(self, dst, count, mean=0.0, stddev=1.0):
+    def generate_log_normal(self, dst, count=None, mean=0.0, stddev=1.0):
         """Generates specified number of 32-bit log-normally distributed
         floats.
 
         Parameters:
-            dst: buffer to store the results.
-            count: number of 32-bit floats to put to dst.
+            dst: buffer to store the results or
+                 numpy array in case of host generator.
+            count: number of 32-bit floats to put to dst or
+                   None to fill full dst when the it's size is available.
             mean: mean of associated normal distribution.
             stddev: stddev of associated normal distribution.
         """
+        dst, count = self._extract_ptr_and_count(dst, count, 4)
         err = self._lib.curandGenerateLogNormal(
             self.handle, dst, count, float(mean), float(stddev))
         if err:
             raise CU.error("curandGenerateLogNormal", err)
 
-    def generate_log_normal_double(self, dst, count, mean=0.0, stddev=1.0):
+    def generate_log_normal_double(self, dst, count=None,
+                                   mean=0.0, stddev=1.0):
         """Generates specified number of 64-bit log-normally distributed
         floats.
 
         Parameters:
-            dst: buffer to store the results.
-            count: number of 64-bit floats to put to dst.
+            dst: buffer to store the results or
+                 numpy array in case of host generator.
+            count: number of 64-bit floats to put to dst or
+                   None to fill full dst when the it's size is available.
             mean: mean of associated normal distribution.
             stddev: stddev of associated normal distribution.
         """
+        dst, count = self._extract_ptr_and_count(dst, count, 8)
         err = self._lib.curandGenerateLogNormalDouble(
             self.handle, dst, count, float(mean), float(stddev))
         if err:
             raise CU.error("curandGenerateLogNormalDouble", err)
 
-    def generate_poisson(self, dst, count, lam=1.0):
+    def generate_poisson(self, dst, count=None, lam=1.0):
         """Generates specified number of 32-bit unsigned int point values
         with Poisson distribution.
 
         Parameters:
-            dst: buffer to store the results.
-            count: number of 32-bit floats to put to dst.
+            dst: buffer to store the results or
+                 numpy array in case of host generator.
+            count: number of 32-bit unsigned ints to put to dst or
+                   None to fill full dst when the it's size is available.
             lam: lambda value of Poisson distribution.
         """
+        dst, count = self._extract_ptr_and_count(dst, count, 4)
         err = self._lib.curandGeneratePoisson(
             self.handle, dst, count, float(lam))
         if err:
@@ -454,7 +512,8 @@ class CURAND(object):
             self._handle = None
 
     def __del__(self):
-        if self.context.handle is None:
+        if self.context is not None and self.context.handle is None:
             raise SystemError("Incorrect destructor call order detected")
         self._release()
-        self.context._del_ref(self)
+        if self.context is not None:
+            self.context._del_ref(self)

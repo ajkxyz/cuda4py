@@ -45,7 +45,7 @@ except ImportError:
 setup(
     name="cuda4py",
     description="CUDA cffi bindings and helper classes",
-    version="1.4.2",
+    version="1.4.3",
     license="Simplified BSD",
     author="Samsung Electronics Co.,Ltd.",
     author_email="a.kazantsev@samsung.com",
@@ -55,7 +55,7 @@ setup(
               "cuda4py.blas", "cuda4py.cudnn", "cuda4py.cufft"],
     install_requires=["cffi"],
     package_dir={"cuda4py": "src/cuda4py"},
-    keywords=["CUDA", "CUBLAS", "CUDNN", "CUFFT", "CURAND", "cuda4py"],
+    keywords=["CUDA", "cuBLAS", "cuDNN", "cuFFT", "cuRAND", "cuda4py"],
     classifiers=[
         "Development Status :: 4 - Beta",
         "Environment :: Console",
@@ -67,6 +67,7 @@ setup(
         "Programming Language :: Python :: 3.3",
         "Programming Language :: Python :: 3.4",
         "Programming Language :: Python :: 3.5",
+        "Programming Language :: Python :: 3.6",
         "Topic :: Software Development :: Libraries"
     ]
 )
